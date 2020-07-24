@@ -2,10 +2,24 @@ from hera_pspec import uvpspec
 from hera_pspec import grouping
 import numpy as np
 
-class PspecModel():
+class PSpecLikelihood():
     """Container for power spectrum measurements and models.
-
-
+    
+    
+    Functionality that we'd want for an analysis:
+        1) comparing theory / systematics to data on equal footing.
+        2) calculating likelihoods.
+            This is the ultimate goal of this class.
+    --------------------------------------
+        3) sampling the posterior.
+            Sampler goes outside of this particular class.
+        4) confidence intervals for astrophysics/cosmology.
+            Also outside of this class.
+        
+    Where do all of these belong? 
+    
+        
+        
     This class keeps track of power-spectrum measurements
      (and their associated covariances and window functions)
      along with a theoretical model and calculations of the likelihoods
@@ -66,13 +80,13 @@ class PspecModel():
             uvpspec object generated from list of uvpspec files. Each
             spectral window is assumed to be statistically independent.
 
-        theory_func : func(k, params, little_h, ps_units) -> p(k)
+        theory_func : func(k, params, little_h, ps_units) -> p(k), C(k, k')
             function provided in theoretical_model arg.
 
         theoretical_prior : func(params) -> prob
             function provided in theoretical_prior
-
-        bias_model : func(k, params, little_h, ps_units) -> p(k)
+            
+        bias_model : func(k, params, little_h, ps_units) -> p(k), C(k, k')
             function provided in nuisance_model
 
         bias_prior : func(params) -> prob
@@ -99,6 +113,8 @@ class PspecModel():
       self.nuisance_model = bias_prior
       self.history = history
       self.little_h = little_h
+      # add parameters that directly reference mean and covariance of measurements.
+      # also add keywords that describe the data distribution.
 
   def windowed_theoretical_ps(theory_params, spw):
       """Calculate theoretical power spectrum with data window function applied.
@@ -125,3 +141,17 @@ class PspecModel():
       # Below, we just have sampling.
       true_ps = self.theoretical_model(k_values, little_h, **theory_params)
       windows_ps = self.measurements.get_window_function(spw, )
+      
+      
+ def log_unnormalized_likelihood(**params):
+    """
+        log-likelihood for set of theoretical and bias parameters.
+        Probability of data given a model (this is distinct from a properly normalized posterior).
+        
+        Parameters
+        ----------
+        
+        params : arbitrary arguments
+            theoretical and systematics parameters to compute likelihood for.
+    """
+    
