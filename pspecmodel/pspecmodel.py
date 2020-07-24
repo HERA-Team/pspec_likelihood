@@ -14,6 +14,8 @@ class PspecModel():
      thus only keeps track of covariances but this may change in the future.
 
      This class also only considers additive nuisance models.
+     
+     How do we keep track of sampling?
     """
 
   def __init__(self, ps_files, theoretical_model, bias_model,
@@ -29,7 +31,7 @@ class PspecModel():
         each power spectrum measurement (or spectral window) are statistically
         independent.
 
-      theoretical_model : func(k, little_h, **params) -> delta_sq [mK^2]
+      theoretical_model : func(k, z, little_h, **params) -> delta_sq [mK^2]
         a function that takes as its arguments a numpy vector of k-values (floats)
         ,a bool (little_h), and any number of additional parameters and returns a vector of
         floats with the same shape as the k-vector. little_h specifies whether k
@@ -39,11 +41,11 @@ class PspecModel():
         a function that takes as its arguments a dictionary of theoretical parameters
         and returns a prior probability for these parameters.
 
-      bias_model : func(k, little_h, **params) -> delta_sq [mK^2]
+      bias_model : func(k, z, little_h, **params) -> delta_sq [mK^2]
         a function that takes in as its arguments a numpy vector of k-values (floats)
         and a bool (little_h) and any additional number of theory params and returns
         a vector of floats with the same shape as the k-vector.
-        The nuisance model should be defined in data space
+        The nuisance model is defined in data space
         and can be treaded as the bias term in
         \hat{p} = W p_true + b
         little_h specifies whether k units are in h/Mpc or 1/Mpc
@@ -52,9 +54,9 @@ class PspecModel():
         a function that takes as its arguments a dictionary of nuisance parameters
         and returns a prior probability for these parameters.
 
-    k_bins : array-like floats
+     k_bins : array-like floats
         a list of floats specifying the centers of k-bins.
-
+        
      history : str
         string with file history.
 
@@ -93,13 +95,16 @@ class PspecModel():
                                                      add_to_history='spherical average with time averaging.',
                                                      little_h=little_h, run_check=run_check)
       self.theoretical_model = theoretical_model
-      self.nuisance_model = nuisance_model
-      self.nuisance_model = nuisance_prior
+      self.nuisance_model = bias_model
+      self.nuisance_model = bias_prior
       self.history = history
       self.little_h = little_h
 
   def windowed_theoretical_ps(theory_params, spw):
       """Calculate theoretical power spectrum with data window function applied.
+         Also apply appropriate frequency / k-averaging/binning to theoretical model.
+          
+      """
 
       Parameters
       ----------
@@ -116,5 +121,7 @@ class PspecModel():
         to that model.
       """
       k_values = np.sqrt(self.measurements.get_kperps(spw, self.little_h) ** 2. + self.measurements.get_kparas(spw, self.little_h) ** 2.)
+      # Need to specify appropriate k-averaging.
+      # Below, we just have sampling.
       true_ps = self.theoretical_model(k_values, little_h, **theory_params)
       windows_ps = self.measurements.get_window_function(spw, )
