@@ -113,6 +113,8 @@ class PSpecLikelihood():
       self.nuisance_model = bias_prior
       self.history = history
       self.little_h = little_h
+      self.kbin_centers = kbin_centers
+      self.kbin_widths = kbin_widths
       # add parameters that directly reference mean and covariance of measurements.
       # also add keywords that describe the data distribution.
 
