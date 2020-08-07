@@ -118,7 +118,7 @@ class PSpecLikelihood():
       # add parameters that directly reference mean and covariance of measurements.
       # also add keywords that describe the data distribution.
 
-  def windowed_theoretical_ps(theory_params, spw):
+  def windowed_theoretical_ps(spw, theory_params):
       """Calculate theoretical power spectrum with data window function applied.
          Also apply appropriate frequency / k-averaging/binning to theoretical model.
           
@@ -138,14 +138,13 @@ class PSpecLikelihood():
         where p_m is a theoretical model power spectrum, W is the window function applied
         to that model.
       """
-      k_values = np.sqrt(self.measurements.get_kperps(spw, self.little_h) ** 2. + self.measurements.get_kparas(spw, self.little_h) ** 2.)
       # Need to specify appropriate k-averaging.
       # Below, we just have sampling.
-      true_ps = self.theoretical_model(k_values, little_h, **theory_params)
-      windows_ps = self.measurements.get_window_function(spw, )
+      discretized_ps = self.discretized_ps(spw, theory_params)
+      windows_ps = self.measurements.get_window_function(spw) @ discretized
       
       
- def log_unnormalized_likelihood(**params):
+ def log_unnormalized_likelihood(params):
     """
         log-likelihood for set of theoretical and bias parameters.
         Probability of data given a model (this is distinct from a properly normalized posterior).
