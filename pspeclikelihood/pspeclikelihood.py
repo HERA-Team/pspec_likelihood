@@ -118,11 +118,63 @@ class PSpecLikelihood():
       # add parameters that directly reference mean and covariance of measurements.
       # also add keywords that describe the data distribution.
 
+  def discretized_ps(spw, theory_params, little_h=True):
+    """Compute the power spectrum in the specified spectral windows and k_bins.
+    Our analysis formalism assumes that the power spectrum is piecewise
+    constant (see e.g. arXiv 1103.0281, 1502.0616). Therefore we bin the
+    power spectrum to the bins given as properties of the class. The
+    redshifts are determined by the spherical windows (spw).
+
+    Possible methods: Just evaluate the power spectrum at the bin centers,
+    integrate over the power spectrum to take the bin average, or
+    evaluate at the bin edges (+ center?) and return the mean.
+
+    Parameters
+    ----------
+    swp : spherical windows
+
+    theory_params : dictionary containing parameters for the theory model
+
+    little_h : bool specifying whether k units are in h/Mpc or 1/Mpc
+
+    Returns
+    ----------
+    results : list of power spectrum values corresponding to the bins
+
+    errors : Estimation of the error through binning, if a suitable method
+    has been chosen, otherwise None.
+    """
+
+    # TODO: get redshift(s) z from spw / integrate
+
+    # Q: Is little_h a keyword argument of theory_func?
+    # Q: Does the bin go from center-width/2 to center+width/2 ?
+    # The error is just an order of magnitude, not any precise confidence interval.
+    # If the power spectrum was monotonous, the error would be the maximal deviation.
+
+    if method == "bin_center":
+      results = theoretical_model(self.kbin_centers, z, little_h, theory_params)
+    if method == "two_point":
+      lower = theoretical_model(self.kbin_centers-self.kbin_widths/2, z, little_h, theory_params)
+      upper = theoretical_model(self.kbin_centers+self.kbin_widths/2, z, little_h, theory_params)
+      results = (lower+upper)/2
+      errors = (lower-upper)/2
+    if method = "integrate"
+      pk_func = lambda k: theoretical_model(k, z, little_h, theory_params)
+      results = []
+      errors = []
+      for center, width in self.kbin_centers, self.kbin_widths:
+        result, error = scipy.quad.integrate(pk_func, center-width/2, center+width/2)/(width)
+        results.append(result)
+        errors.append(error)
+
+    return results, errors
+
+
   def windowed_theoretical_ps(spw, theory_params):
       """Calculate theoretical power spectrum with data window function applied.
          Also apply appropriate frequency / k-averaging/binning to theoretical model.
           
-      """
 
       Parameters
       ----------
