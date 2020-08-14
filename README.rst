@@ -22,9 +22,23 @@ Features
 * Feature 2
 
 
+Installation
+------------
+Clone/download the repo and ``pip install .``, or ``pip install git+git://github.com/hera-team/pspec_likelihood``.
+
+If developing::
+
+    git clone https://github.com/hera-team/pspec_likelihood
+    cd pspec_likelihood
+    pip install -e .[dev]
+    pre-commit install
+
+
 Quickstart
 ----------
-Import like this...
+Import like this::
+
+    from pspec_likelihood import PSpecLikelihood
 
 
 Versioning
