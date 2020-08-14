@@ -1,0 +1,14 @@
+build/
+dist/
+*egg*
+*.pyc
+.idea*
+*~
+.DS_Store
+*.pyc
+docs/_*/*
+.ipynb_checkpoints
+\.pytest_cache/v/cache/
+\.tox
+.coverage
+pip-wheel-metadata/
