@@ -45,6 +45,7 @@ class PSpecLikelihood:
         weight_by_cov=True,
         history="",
         run_check=True,
+        params_list=None,
     ):
         r"""Container for power spectrum measurements and models.
 
@@ -55,15 +56,15 @@ class PSpecLikelihood:
             or a single uvpspec object. Our current framework assumes that these
             each power spectrum measurement (or spectral window) are statistically
             independent.
-        theoretical_model : func(k, z, little_h, **params) -> delta_sq [mK^2]
-            a function that takes as its arguments a numpy vector of k-values (floats)
-            ,a bool (little_h), and any number of additional parameters and returns a vector of
-            floats with the same shape as the k-vector. little_h specifies whether k
-            units are in h/Mpc or 1/Mpc.
+        theoretical_model : func(k, z, little_h, params) -> delta_sq [mK^2]
+            a function that takes as its arguments a numpy vector of k-values (floats),
+            a bool (little_h), and any number of additional parameters (as dictionary)
+            and returns a vector of floats with the same shape as the k-vector.
+            little_h specifies whether k units are in h/Mpc or 1/Mpc.
         theoretical_prior : func(params) -> prob
             a function that takes as its arguments a dictionary of theoretical parameters
             and returns a prior probability for these parameters.
-        bias_model : func(k, z, little_h, **params) -> delta_sq [mK^2]
+        bias_model : func(k, z, little_h, params) -> delta_sq [mK^2]
             a function that takes in as its arguments a numpy vector of k-values (floats)
             and a bool (little_h) and any additional number of theory params and returns
             a vector of floats with the same shape as the k-vector.
@@ -79,6 +80,12 @@ class PSpecLikelihood:
             a list of floats specifying the centers of k-bins.
         history : str
             string with file history.
+        params_list: list of strings
+            list of parameter names if params is list, otherwise None.
+            log_unnormalized_likelihood can take params as either a dictionary
+            or a list of values. In the latter case, params_list needs to
+            be given as the list of corresponding parameter names (keys) so
+            the list can internally be converted to a dictionary.
 
         Attributes
         -------
@@ -129,6 +136,7 @@ class PSpecLikelihood:
         self.kbin_widths = kbin_widths
         # add parameters that directly reference mean and covariance of measurements.
         # also add keywords that describe the data distribution.
+        self.params_list = params_list
 
     def discretized_ps(self, spw, theory_params, little_h=True, method=None):
         r"""Compute the power spectrum in the specified spectral windows and k_bins.
@@ -238,7 +246,21 @@ def log_unnormalized_likelihood(params):
 
     Parameters
     ----------
-    params : arbitrary arguments
+    params : dictionary or list
         theoretical and systematics parameters to compute likelihood for.
+        This is the only function that accepts params as list or dict, other
+        functions get called from here and take a dictionary.
     """
+    # Make sure that params is a dictionary or convert from list
+    if params_list != None:
+        assert type(params) is list, "params is not a list, but params_list was given.\
+            When params is a dictionary, leave params_list set to None."
+        params_dict = {}
+        for index in len(params_list):
+            key = params_list[index]
+            params_dict[key] = params[index]
+        params = params_dict
+    else:
+        assert type(params) is dict, "params is not a dictionary, but no params_list was given.\
+            params can be a dictionary or a list if params_list is supplied."
     pass
