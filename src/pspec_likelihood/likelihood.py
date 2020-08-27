@@ -41,6 +41,7 @@ class PSpecLikelihood:
         bias_prior,
         kbin_centers,
         kbin_widths,
+        theoretical_model_vectorized=False,
         little_h=True,
         weight_by_cov=True,
         history="",
@@ -70,6 +71,8 @@ class PSpecLikelihood:
             The nuisance model is defined in data space
             and can be treaded as the bias term in
             \hat{p} = W p_true + b
+        theoretical_model_vectorized: bool
+            specifies whether the theoretical model accepts numpy-vectors for k and z.
         little_h
             specifies whether k units are in h/Mpc or 1/Mpc
         bias_prior : func(params) -> prob
@@ -139,8 +142,7 @@ class PSpecLikelihood:
         redshifts are determined by the spherical windows (spw).
 
         Possible methods: Just evaluate the power spectrum at the bin centers,
-        integrate over the power spectrum to take the bin average, or
-        evaluate at the bin edges (+ center?) and return the mean.
+        or integrate over the power spectrum to take the bin average.
 
         Parameters
         ----------
@@ -156,29 +158,19 @@ class PSpecLikelihood:
         results
             list of power spectrum values corresponding to the bins
         errors
-            Estimation of the error through binning, if a suitable method has been
-            chosen, otherwise None.
+            Integration error if a suitable method has been chosen, otherwise None.
         """
+
+        #Todo: Mapping from spw to (one/many) redshift(s), see also issue #3
         z = self.get_z_from_spw(spw)
 
-        # Q: Is little_h a keyword argument of theory_func?
-        # Q: Does the bin go from center-width/2 to center+width/2 ?
-        # The error is just an order of magnitude, not any precise confidence interval.
-        # If the power spectrum was monotonous, the error would be the maximal deviation.
+        #Todo: Implement an efficient wrapper in case
+        #      theoretical_model_vectorized==False
 
         if method == "bin_center":
             results = self.theoretical_model(
                 self.kbin_centers, z, little_h, theory_params
             )
-        elif method == "two_point":
-            lower = self.theoretical_model(
-                self.kbin_centers - self.kbin_widths / 2, z, little_h, theory_params
-            )
-            upper = self.theoretical_model(
-                self.kbin_centers + self.kbin_widths / 2, z, little_h, theory_params
-            )
-            results = (lower + upper) / 2
-            errors = (lower - upper) / 2
         elif method == "integrate":
 
             def pk_func(k):
@@ -192,7 +184,7 @@ class PSpecLikelihood:
                 errors.append(error / width)
         else:
             raise ValueError(
-                f"method must be one of 'bin_center', 'two_point' or 'integrate'. Got '{method}'."
+                f"method must be one of 'bin_center' or 'integrate'. Got '{method}'."
             )
 
         return results, errors
