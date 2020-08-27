@@ -237,30 +237,33 @@ class PSpecLikelihood:
         # TODO: get redshift(s) z from spw / integrate
         raise NotImplementedError("Need to implement this.")
 
+    def log_unnormalized_likelihood(self, params):
+        r"""
+        log-likelihood for set of theoretical and bias parameters.
 
-def log_unnormalized_likelihood(params):
-    r"""
-    log-likelihood for set of theoretical and bias parameters.
+        Probability of data given a model (this is distinct from a properly normalized posterior).
 
-    Probability of data given a model (this is distinct from a properly normalized posterior).
-
-    Parameters
-    ----------
-    params : dictionary or list
-        theoretical and systematics parameters to compute likelihood for.
-        This is the only function that accepts params as list or dict, other
-        functions get called from here and take a dictionary.
-    """
-    # Make sure that params is a dictionary or convert from list
-    if params_list != None:
-        assert type(params) is list, "params is not a list, but params_list was given.\
-            When params is a dictionary, leave params_list set to None."
-        params_dict = {}
-        for index in len(params_list):
-            key = params_list[index]
-            params_dict[key] = params[index]
-        params = params_dict
-    else:
-        assert type(params) is dict, "params is not a dictionary, but no params_list was given.\
-            params can be a dictionary or a list if params_list is supplied."
-    pass
+        Parameters
+        ----------
+        params : dictionary or list
+            theoretical and systematics parameters to compute likelihood for.
+            This is the only function that accepts params as list or dict, other
+            functions get called from here and take a dictionary.
+        """
+        # Make sure that params is a dictionary or convert from list
+        if self.params_list is not None:
+            assert (
+                type(params) is list
+            ), "params is not a list, but params_list was given.\
+                When params is a dictionary, leave params_list set to None."
+            params_dict = {}
+            for index in len(self.params_list):
+                key = self.params_list[index]
+                params_dict[key] = params[index]
+            params = params_dict
+        else:
+            assert (
+                type(params) is dict
+            ), "params is not a dictionary, but no params_list was given.\
+                params can be a dictionary or a list if params_list is supplied."
+        pass
