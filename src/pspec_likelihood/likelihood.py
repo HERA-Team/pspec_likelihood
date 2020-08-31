@@ -231,9 +231,8 @@ class PSpecLikelihood:
         windows_ps = self.measurements.get_window_function(spw)
         return discretized_ps, windows_ps
 
-    @staticmethod
-    def get_z_from_spw(spw) -> float:
-        """Get redshift from a spectral window."""
+    def get_z_from_spw(self, spw):
+        r"""Get redshift from a spectral window."""
         # TODO: get redshift(s) z from spw / integrate
         raise NotImplementedError("Need to implement this.")
 
@@ -250,22 +249,21 @@ class PSpecLikelihood:
         params : dictionary
             params convert to dictionary
         """
-
         if self.params_list is not None:
-            assert (
-                type(params) is list
-            ), ("params is not a list, but params_list was given. "
-                "When params is a dictionary, leave params_list set to None.")
+            assert type(params) is list, (
+                "params is not a list, but params_list was given. "
+                "When params is a dictionary, leave params_list set to None."
+            )
             params_dict = {}
             for index in len(self.params_list):
                 key = self.params_list[index]
                 params_dict[key] = params[index]
             params = params_dict
         else:
-            assert (
-                type(params) is dict
-            ), ("params is not a dictionary, but no params_list was given. "
-                "params can be a dictionary, or a list if params_list is supplied.")
+            assert type(params) is dict, (
+                "params is not a dictionary, but no params_list was given. "
+                "params can be a dictionary, or a list if params_list is supplied."
+            )
         return params
 
     def log_unnormalized_likelihood(self, params):
@@ -281,6 +279,6 @@ class PSpecLikelihood:
             This is the only function that accepts params as list or dict, other
             functions get called from here and take a dictionary.
         """
-        params = params_to_dict(params)
+        params = self.params_to_dict(params)
         raise NotImplementedError
         pass
