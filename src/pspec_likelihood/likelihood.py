@@ -1,134 +1,114 @@
-"""Primary module defining the pspec likelihood."""
+"""Primary module defining container for power spectrum measurements and models.
+
+Functionality that we'd want for an analysis:
+    1) comparing theory / systematics to data on equal footing.
+    2) calculating likelihoods.
+        This is the ultimate goal of this class.
+--------------------------------------
+    3) sampling the posterior.
+        Sampler goes outside of this particular class.
+    4) confidence intervals for astrophysics/cosmology.
+        Also outside of this class.
+
+Where do all of these belong?
+
+This class keeps track of power-spectrum measurements
+ (and their associated covariances and window functions)
+ along with a theoretical model and calculations of the likelihoods
+ given this model that propertly account for the window functions.
+ For now, this container assumes Gaussian measurement errors and
+ thus only keeps track of covariances but this may change in the future.
+
+ This class also only considers additive nuisance models.
+
+ How do we keep track of sampling?
+"""
+from functools import cached_property
+
+import attr
+import numpy as np
 from hera_pspec import grouping
 from hera_pspec.uvpspec import UVPSpec
 from scipy.integrate import quad
 
+from .utils import listify
 
+
+@attr.s(frozen=True)
 class PSpecLikelihood:
-    """Container for power spectrum measurements and models.
+    r"""Container for power spectrum measurements and models.
 
-    Functionality that we'd want for an analysis:
-        1) comparing theory / systematics to data on equal footing.
-        2) calculating likelihoods.
-            This is the ultimate goal of this class.
-    --------------------------------------
-        3) sampling the posterior.
-            Sampler goes outside of this particular class.
-        4) confidence intervals for astrophysics/cosmology.
-            Also outside of this class.
+    Parameters
+    ----------
+    ps_files : list of str or Path
+        List of uvpspec files that constitute power-spectrum measurements,
+        or a single filename. The current framework assumes that
+        each power spectrum measurement (or spectral window) is statistically
+        independent.
+    theoretical_model : func(k, z, little_h, **params) -> delta_sq [mK^2]
+        a function that takes as its arguments a numpy vector of k-values (floats),
+        a bool (little_h), and any number of additional parameters and returns a vector of
+        floats with the same shape as the k-vector. little_h specifies whether k
+        units are in h/Mpc or 1/Mpc.
+    bias_model : func(k, z, little_h, **params) -> delta_sq [mK^2]
+        a function that takes in as its arguments a numpy vector of k-values (floats)
+        and a bool (little_h) and any additional number of theory params and returns
+        a vector of floats with the same shape as the k-vector.
+        The nuisance model is defined in data space
+        and can be treaded as the bias term in
+        \hat{p} = W p_true + b
+    little_h
+        specifies whether k units are in h/Mpc or 1/Mpc
+    bias_prior : func(params) -> prob
+        a function that takes as its arguments a dictionary of nuisance parameters
+        and returns a prior probability for these parameters.
+    k_bins : array-like floats
+        a list of floats specifying the centers of k-bins.
+    history : str
+        string with file history.
 
-    Where do all of these belong?
-
-
-
-    This class keeps track of power-spectrum measurements
-     (and their associated covariances and window functions)
-     along with a theoretical model and calculations of the likelihoods
-     given this model that propertly account for the window functions.
-     For now, this container assumes Gaussian measurement errors and
-     thus only keeps track of covariances but this may change in the future.
-
-     This class also only considers additive nuisance models.
-
-     How do we keep track of sampling?
     """
 
-    def __init__(
-        self,
-        ps_files,
-        theoretical_model,
-        bias_model,
-        bias_prior,
-        kbin_centers,
-        kbin_widths,
-        little_h=True,
-        weight_by_cov=True,
-        history="",
-        run_check=True,
-    ):
-        r"""Container for power spectrum measurements and models.
+    ps_files = attr.ib(converter=listify)
+    theoretical_model = attr.ib(validator=attr.validators.is_callable())
+    bias_model = attr.ib(validator=attr.validators.is_callable())
+    k_bin_widths = attr.ib(converter=np.ndarray)
+    k_bin_centres = attr.ib(converter=np.ndarray)
 
-        Parameters
-        ----------
-        ps_files : list of uvpspec files
-            List of uvpspec files that constitute our power-spectrum measurements
-            or a single uvpspec object. Our current framework assumes that these
-            each power spectrum measurement (or spectral window) are statistically
-            independent.
-        theoretical_model : func(k, z, little_h, **params) -> delta_sq [mK^2]
-            a function that takes as its arguments a numpy vector of k-values (floats)
-            ,a bool (little_h), and any number of additional parameters and returns a vector of
-            floats with the same shape as the k-vector. little_h specifies whether k
-            units are in h/Mpc or 1/Mpc.
-        theoretical_prior : func(params) -> prob
-            a function that takes as its arguments a dictionary of theoretical parameters
-            and returns a prior probability for these parameters.
-        bias_model : func(k, z, little_h, **params) -> delta_sq [mK^2]
-            a function that takes in as its arguments a numpy vector of k-values (floats)
-            and a bool (little_h) and any additional number of theory params and returns
-            a vector of floats with the same shape as the k-vector.
-            The nuisance model is defined in data space
-            and can be treaded as the bias term in
-            \hat{p} = W p_true + b
-        little_h
-            specifies whether k units are in h/Mpc or 1/Mpc
-        bias_prior : func(params) -> prob
-            a function that takes as its arguments a dictionary of nuisance parameters
-            and returns a prior probability for these parameters.
-        k_bins : array-like floats
-            a list of floats specifying the centers of k-bins.
-        history : str
-            string with file history.
+    little_h = attr.ib(True, converter=bool, validator=attr.validators.is_bool())
+    weight_by_cov = attr.ib(True, converter=bool, validator=attr.validators.is_bool())
+    history = attr.ib("", converter=str)
+    run_check = attr.ib(True, converter=bool)
 
-        Attributes
-        -------
-        measurements : UVPspec
-            uvpspec object generated from list of uvpspec files. Each
-            spectral window is assumed to be statistically independent.
+    @ps_files.validator
+    def _check_existence(self, att, val):
+        for fl in val:
+            if not fl.exists():
+                raise FileNotFoundError(f"{fl} doesn't exist")
 
-        theory_func : func(k, params, little_h, ps_units) -> p(k), C(k, k')
-            function provided in theoretical_model arg.
+    @k_bin_centres.validator
+    @k_bin_widths.validator
+    def _check_kbins(self, att, val):
+        if not np.isrealobj(val):
+            raise TypeError("k_bins must be real numbers")
 
-        theoretical_prior : func(params) -> prob
-            function provided in theoretical_prior
+        if not len(val):
+            raise ValueError("k_bins must have at least one element.")
 
-        bias_model : func(k, params, little_h, ps_units) -> p(k), C(k, k')
-            function provided in nuisance_model
-
-        bias_prior : func(params) -> prob
-            functin provided in nuisance_prior
-
-        history : str
-            string provided in history arg.
-        """
-        if isinstance(ps_files, str):
-            ps_files = [ps_files]
-        # what assumptions are we making about the power spectra?
-        # are they spherically averaged?
-        if not isinstance(ps_files, list):
-            raise ValueError("ps_files must be a string or a list of strings.")
-        uvp_in = UVPSpec(ps_files)
-        # spherically average all power spectrum measurements using inverse covariance
-        # weighting.
-        self.measurements = grouping.spherical_average(
+    @cached_property
+    def measurements(self):
+        """The UVPSpec measurements."""
+        uvp_in = UVPSpec(self.ps_files)
+        return grouping.spherical_average(
             uvp_in,
-            kbin_centers,
-            kbin_widths,
+            self.k_bin_centers,
+            self.k_bin_widths,
             time_average=True,
-            weight_by_cov=weight_by_cov,
+            weight_by_cov=self.weight_by_cov,
             add_to_history="spherical average with time averaging.",
-            little_h=little_h,
-            run_check=run_check,
+            little_h=self.little_h,
+            run_check=self.run_check,
         )
-        self.theoretical_model = theoretical_model
-        self.nuisance_model = bias_model
-        self.nuisance_model = bias_prior
-        self.history = history
-        self.little_h = little_h
-        self.kbin_centers = kbin_centers
-        self.kbin_widths = kbin_widths
-        # add parameters that directly reference mean and covariance of measurements.
-        # also add keywords that describe the data distribution.
 
     def discretized_ps(self, spw, theory_params, little_h=True, method=None):
         r"""Compute the power spectrum in the specified spectral windows and k_bins.
@@ -150,6 +130,9 @@ class PSpecLikelihood:
             dictionary containing parameters for the theory model
         little_h
             bool specifying whether k units are in h/Mpc or 1/Mpc
+        method
+            One of 'bin_center', 'two_point' or 'integrate'. The method of defining
+            value within a bin.
 
         Returns
         ----------
@@ -168,14 +151,15 @@ class PSpecLikelihood:
 
         if method == "bin_center":
             results = self.theoretical_model(
-                self.kbin_centers, z, little_h, theory_params
+                self.k_bin_centers, z, little_h, theory_params
             )
+            errors = None
         elif method == "two_point":
             lower = self.theoretical_model(
-                self.kbin_centers - self.kbin_widths / 2, z, little_h, theory_params
+                self.k_bin_centers - self.k_bin_widths / 2, z, little_h, theory_params
             )
             upper = self.theoretical_model(
-                self.kbin_centers + self.kbin_widths / 2, z, little_h, theory_params
+                self.k_bin_centers + self.k_bin_widths / 2, z, little_h, theory_params
             )
             results = (lower + upper) / 2
             errors = (lower - upper) / 2
@@ -186,7 +170,7 @@ class PSpecLikelihood:
 
             results = []
             errors = []
-            for center, width in self.kbin_centers, self.kbin_widths:
+            for center, width in zip(self.kbin_centers, self.kbin_widths):
                 result, error = quad(pk_func, center - width / 2, center + width / 2)
                 results.append(result / width)
                 errors.append(error / width)
