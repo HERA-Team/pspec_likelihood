@@ -45,7 +45,7 @@ class PSpecLikelihood:
         weight_by_cov=True,
         history="",
         run_check=True,
-        params_list=None,
+        param_names=None,
     ):
         r"""Container for power spectrum measurements and models.
 
@@ -80,10 +80,10 @@ class PSpecLikelihood:
             a list of floats specifying the centers of k-bins.
         history : str
             string with file history.
-        params_list: list of strings
+        param_names: list of strings
             list of parameter names if params is list, otherwise None.
             log_unnormalized_likelihood can take params as either a dictionary
-            or a list of values. In the latter case, params_list needs to
+            or a list of values. In the latter case, param_names needs to
             be given as the list of corresponding parameter names (keys) so
             the list can internally be converted to a dictionary.
 
@@ -136,7 +136,7 @@ class PSpecLikelihood:
         self.kbin_widths = kbin_widths
         # add parameters that directly reference mean and covariance of measurements.
         # also add keywords that describe the data distribution.
-        self.params_list = params_list
+        self.param_names = param_names
 
     def discretized_ps(self, spw, theory_params, little_h=True, method=None):
         r"""Compute the power spectrum in the specified spectral windows and k_bins.
@@ -238,7 +238,7 @@ class PSpecLikelihood:
 
     def params_to_dict(self, params):
         r"""
-        Check if params is a list or dictionary. If list convert to dictionary using params_list.
+        Check if params is a list or dictionary. If list convert to dictionary using param_names.
 
         Parameters
         ----------
@@ -249,20 +249,20 @@ class PSpecLikelihood:
         params : dictionary
             params convert to dictionary
         """
-        if self.params_list is not None:
+        if self.param_names is not None:
             assert type(params) is list, (
-                "params is not a list, but params_list was given. "
-                "When params is a dictionary, leave params_list set to None."
+                "params is not a list, but param_names was given. "
+                "When params is a dictionary, leave param_names set to None."
             )
             params_dict = {}
-            for index in len(self.params_list):
-                key = self.params_list[index]
+            for index in len(self.param_names):
+                key = self.param_names[index]
                 params_dict[key] = params[index]
             params = params_dict
         else:
             assert type(params) is dict, (
-                "params is not a dictionary, but no params_list was given. "
-                "params can be a dictionary, or a list if params_list is supplied."
+                "params is not a dictionary, but no param_names was given. "
+                "params can be a dictionary, or a list if param_names is supplied."
             )
         return params
 
