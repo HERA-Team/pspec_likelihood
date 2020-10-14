@@ -136,6 +136,7 @@ class PSpecLikelihood:
         self.kbin_widths = kbin_widths
         # add parameters that directly reference mean and covariance of measurements.
         # also add keywords that describe the data distribution.
+        assert isinstance(param_names, [None, list, tuple])
         self.param_names = param_names
 
     def discretized_ps(self, spw, theory_params, little_h=True, method=None):
@@ -249,22 +250,21 @@ class PSpecLikelihood:
         params : dictionary
             params convert to dictionary
         """
-        if self.param_names is not None:
-            assert type(params) is list, (
-                "params is not a list, but param_names was given. "
-                "When params is a dictionary, leave param_names set to None."
-            )
-            params_dict = {}
-            for index in len(self.param_names):
-                key = self.param_names[index]
-                params_dict[key] = params[index]
-            params = params_dict
+        if isinstance(params, dict):
+            if self.param_names is not None:
+                assert set(self.param_names) == set(
+                    params.keys()
+                ), "input parameters don't match parameters of the likelihood"
+            return params
         else:
-            assert type(params) is dict, (
-                "params is not a dictionary, but no param_names was given. "
-                "params can be a dictionary, or a list if param_names is supplied."
-            )
-        return params
+            if self.param_names is None:
+                raise ValueError(
+                    "To pass params as a sequence, rather than dict, likelihood must be created with param_names"
+                )
+            assert isinstance(
+                params, [list, tuple]
+            ), "input parameters must be either dict, list or tuple"
+            return {k: v for k, v in zip(self.param_names, params)}
 
     def log_unnormalized_likelihood(self, params):
         r"""
