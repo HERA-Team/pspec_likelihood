@@ -23,10 +23,9 @@ This class keeps track of power-spectrum measurements
 
  How do we keep track of sampling?
 """
-from functools import cached_property
-
 import attr
 import numpy as np
+from cached_property import cached_property
 from hera_pspec import grouping
 from hera_pspec.uvpspec import UVPSpec
 from scipy.integrate import quad
