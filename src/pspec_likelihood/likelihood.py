@@ -81,14 +81,14 @@ class PSpecLikelihood:
     k_bin_centres = attr.ib(converter=np.ndarray)
 
     little_h = attr.ib(
-        True, converter=bool, validator=attr.validators.is_instance(bool)
+        True, converter=bool, validator=attr.validators.instance_of(bool)
     )
     weight_by_cov = attr.ib(
-        True, converter=bool, validator=attr.validators.is_instance(bool)
+        True, converter=bool, validator=attr.validators.instance_of(bool)
     )
     history = attr.ib("", converter=str)
     run_check = attr.ib(True, converter=bool)
-    param_names = attr.ib(None, convert=attr.converters.optional(tuple))
+    param_names = attr.ib(None, converter=attr.converters.optional(tuple))
 
     @ps_files.validator
     def _check_existence(self, att, val):
