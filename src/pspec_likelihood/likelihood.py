@@ -73,18 +73,23 @@ class PSpecLikelihood:
         be given as the list of corresponding parameter names (keys) so
         the list can internally be converted to a dictionary.
     """
+
     ps_files = attr.ib(converter=listify)
     theoretical_model = attr.ib(validator=attr.validators.is_callable())
     bias_model = attr.ib(validator=attr.validators.is_callable())
     k_bin_widths = attr.ib(converter=np.ndarray)
     k_bin_centres = attr.ib(converter=np.ndarray)
 
-    little_h = attr.ib(True, converter=bool, validator=attr.validators.is_instance(bool))
-    weight_by_cov = attr.ib(True, converter=bool, validator=attr.validators.is_instance(bool))
+    little_h = attr.ib(
+        True, converter=bool, validator=attr.validators.is_instance(bool)
+    )
+    weight_by_cov = attr.ib(
+        True, converter=bool, validator=attr.validators.is_instance(bool)
+    )
     history = attr.ib("", converter=str)
     run_check = attr.ib(True, converter=bool)
     param_names = attr.ib(None, convert=attr.converters.optional(tuple))
-                          
+
     @ps_files.validator
     def _check_existence(self, att, val):
         for fl in val:
@@ -105,7 +110,6 @@ class PSpecLikelihood:
         """The UVPSpec measurements."""
         uvp_in = UVPSpec(self.ps_files)
         return grouping.spherical_average(
-
             uvp_in,
             self.k_bin_centers,
             self.k_bin_widths,
@@ -224,7 +228,7 @@ class PSpecLikelihood:
 
         Parameters
         ----------
-        params : dictionary or list
+        params : dictionary, list or tuple
 
         Returns
         ----------
