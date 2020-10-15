@@ -23,10 +23,9 @@ This class keeps track of power-spectrum measurements
 
  How do we keep track of sampling?
 """
-from functools import cached_property
-
 import attr
 import numpy as np
+from cached_property import cached_property
 from hera_pspec import grouping
 from hera_pspec.uvpspec import UVPSpec
 from scipy.integrate import quad
@@ -66,7 +65,12 @@ class PSpecLikelihood:
         a list of floats specifying the centers of k-bins.
     history : str
         string with file history.
-
+    param_names: list of strings
+        list of parameter names if params is list, otherwise None.
+        log_unnormalized_likelihood can take params as either a dictionary
+        or a list of values. In the latter case, param_names needs to
+        be given as the list of corresponding parameter names (keys) so
+        the list can internally be converted to a dictionary.
     """
 
     ps_files = attr.ib(converter=listify)
@@ -75,10 +79,15 @@ class PSpecLikelihood:
     k_bin_widths = attr.ib(converter=np.ndarray)
     k_bin_centres = attr.ib(converter=np.ndarray)
 
-    little_h = attr.ib(True, converter=bool, validator=attr.validators.is_bool())
-    weight_by_cov = attr.ib(True, converter=bool, validator=attr.validators.is_bool())
+    little_h = attr.ib(
+        True, converter=bool, validator=attr.validators.instance_of(bool)
+    )
+    weight_by_cov = attr.ib(
+        True, converter=bool, validator=attr.validators.instance_of(bool)
+    )
     history = attr.ib("", converter=str)
     run_check = attr.ib(True, converter=bool)
+    param_names = attr.ib(None, converter=attr.converters.optional(tuple))
 
     @ps_files.validator
     def _check_existence(self, att, val):
@@ -207,22 +216,53 @@ class PSpecLikelihood:
         windows_ps = self.measurements.get_window_function(spw)
         return discretized_ps, windows_ps
 
-    @staticmethod
-    def get_z_from_spw(spw) -> float:
-        """Get redshift from a spectral window."""
+    def get_z_from_spw(self, spw):
+        r"""Get redshift from a spectral window."""
         # TODO: get redshift(s) z from spw / integrate
         raise NotImplementedError("Need to implement this.")
 
+    def params_to_dict(self, params):
+        r"""
+        Check if params is a list or dictionary. If list convert to dictionary using param_names.
 
-def log_unnormalized_likelihood(params):
-    r"""
-    log-likelihood for set of theoretical and bias parameters.
+        Parameters
+        ----------
+        params : dictionary, list or tuple
 
-    Probability of data given a model (this is distinct from a properly normalized posterior).
+        Returns
+        ----------
+        params : dictionary
+            params convert to dictionary
+        """
+        if isinstance(params, dict):
+            if self.param_names is not None:
+                assert set(self.param_names) == set(
+                    params.keys()
+                ), "input parameters don't match parameters of the likelihood"
+            return params
+        else:
+            if self.param_names is None:
+                raise ValueError(
+                    "To pass params as a sequence, rather than dict, likelihood must be created with param_names"
+                )
+            assert isinstance(
+                params, [list, tuple]
+            ), "input parameters must be either dict, list or tuple"
+            return {k: v for k, v in zip(self.param_names, params)}
 
-    Parameters
-    ----------
-    params : arbitrary arguments
-        theoretical and systematics parameters to compute likelihood for.
-    """
-    pass
+    def log_unnormalized_likelihood(self, params):
+        r"""
+        log-likelihood for set of theoretical and bias parameters.
+
+        Probability of data given a model (this is distinct from a properly normalized posterior).
+
+        Parameters
+        ----------
+        params : dictionary or list
+            theoretical and systematics parameters to compute likelihood for.
+            This is the only function that accepts params as list or dict, other
+            functions get called from here and take a dictionary.
+        """
+        params = self.params_to_dict(params)
+        raise NotImplementedError
+        pass
