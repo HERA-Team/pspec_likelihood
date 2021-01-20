@@ -45,5 +45,14 @@ class TestLikelihood(unittest.TestCase):
 
     def test_windowed_theoretical_ps(self):
         """
-        
+        window function should be delta functions.
         """
+        lk = copy.deepcopy(self.likelihood)
+        params = {'a': 1.0, 'b': 0.0}
+        ps_windowed = lk.windowed_theoretical_ps(0, params)
+        ps_theory = lk.likelihood.discretized_ps(0, params)
+        unittest.assertTrue(np.all(np.isclose(ps_theory, ps_windowed)))
+        # now multiply lk window function by 0.333
+        lk.measurement.window_funtion_array[0] *= 0.333
+        ps_windowed = lk.windowed_theoretical_ps(0, params)
+        unittest.assertTrue(np.all(np.isclose(ps_thery, ps_windowed / 0.333)))
