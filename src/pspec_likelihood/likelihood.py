@@ -29,8 +29,9 @@ from cached_property import cached_property
 from hera_pspec import grouping
 from hera_pspec.uvpspec import UVPSpec
 from scipy.integrate import quad
-
+import os, copy
 from .utils import listify
+from hera_pspec.conversions import Cosmo_Conversions
 
 
 @attr.s(frozen=True)
@@ -39,7 +40,7 @@ class PSpecLikelihood:
 
     Parameters
     ----------
-    ps_files : list of str or Path
+    ps_file : list of str or Path
         List of uvpspec files that constitute power-spectrum measurements,
         or a single filename. The current framework assumes that
         each power spectrum measurement (or spectral window) is statistically
@@ -76,8 +77,8 @@ class PSpecLikelihood:
     ps_files = attr.ib(converter=listify)
     theoretical_model = attr.ib(validator=attr.validators.is_callable())
     bias_model = attr.ib(validator=attr.validators.is_callable())
-    k_bin_widths = attr.ib(converter=np.ndarray)
-    k_bin_centres = attr.ib(converter=np.ndarray)
+    k_bin_widths = attr.ib(type=np.ndarray)
+    k_bin_centers = attr.ib(type=np.ndarray)
 
     little_h = attr.ib(
         True, converter=bool, validator=attr.validators.instance_of(bool)
@@ -92,10 +93,10 @@ class PSpecLikelihood:
     @ps_files.validator
     def _check_existence(self, att, val):
         for fl in val:
-            if not fl.exists():
+            if not os.path.exists(fl):
                 raise FileNotFoundError(f"{fl} doesn't exist")
 
-    @k_bin_centres.validator
+    @k_bin_centers.validator
     @k_bin_widths.validator
     def _check_kbins(self, att, val):
         if not np.isrealobj(val):
@@ -107,12 +108,19 @@ class PSpecLikelihood:
     @cached_property
     def measurements(self):
         """The UVPSpec measurements."""
-        uvp_in = UVPSpec(self.ps_files)
+        for psnum, ps_file in enumerate(self.ps_files):
+            uvpt = UVPSpec()
+            uvpt.read_hdf5(ps_file)
+            if psnum == 0:
+                uvp_in = uvpt
+            else:
+                uvp_in += uvpt
+
         return grouping.spherical_average(
             uvp_in,
             self.k_bin_centers,
             self.k_bin_widths,
-            time_average=True,
+            time_avg=True,
             weight_by_cov=self.weight_by_cov,
             add_to_history="spherical average with time averaging.",
             little_h=self.little_h,
@@ -190,7 +198,7 @@ class PSpecLikelihood:
 
         return results, errors
 
-    def windowed_theoretical_ps(self, spw, theory_params):
+    def windowed_theoretical_ps(self, spw, theory_params, discretization_method):
         r"""Calculate theoretical power spectrum with data window function applied.
 
         Also apply appropriate frequency / k-averaging/binning to theoretical model.
@@ -203,7 +211,8 @@ class PSpecLikelihood:
             number of spectral window to generate windowed theoretical ps.
         little_h : bool, optional
             if true, use little_h units (e.g. h^-1 Mpc)
-
+        discretization_method : str,
+            method for discretizing power spectrum.
         Returns
         -------
         A vector of floats, p_w = W p_m
@@ -212,14 +221,17 @@ class PSpecLikelihood:
         """
         # Need to specify appropriate k-averaging.
         # Below, we just have sampling.
-        discretized_ps = self.discretized_ps(spw, theory_params)
-        windows_ps = self.measurements.get_window_function(spw)
+        discretized_ps, _ = self.discretized_ps(spw, theory_params, method=discretization_method)
+        windows_ps = self.measurements.get_window_function(self.measurements.get_all_keys()[0])
         return windows_ps @ discretized_ps
 
     def get_z_from_spw(self, spw):
         r"""Get redshift from a spectral window."""
         # TODO: get redshift(s) z from spw / integrate
-        raise NotImplementedError("Need to implement this.")
+        spw_range = self.measurements.get_spw_ranges(spw)
+        f0 = .5 * (spw_range[0][0] + spw_range[0][1])
+        return Cosmo_Conversions().f2z(f0)
+
 
     def params_to_dict(self, params):
         r"""
