@@ -15,7 +15,7 @@ Where do all of these belong?
 This class keeps track of power-spectrum measurements
  (and their associated covariances and window functions)
  along with a theoretical model and calculations of the likelihoods
- given this model that propertly account for the window functions.
+ given this model that properly account for the window functions.
  For now, this container assumes Gaussian measurement errors and
  thus only keeps track of covariances but this may change in the future.
 
@@ -214,7 +214,7 @@ class PSpecLikelihood:
         # Below, we just have sampling.
         discretized_ps = self.discretized_ps(spw, theory_params)
         windows_ps = self.measurements.get_window_function(spw)
-        return discretized_ps, windows_ps
+        return windows_ps @ discretized_ps
 
     def get_z_from_spw(self, spw):
         r"""Get redshift from a spectral window."""
