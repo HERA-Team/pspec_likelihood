@@ -236,7 +236,7 @@ class PSpecLikelihood:
             assert isinstance(
                 params, [list, tuple]
             ), "input parameters must be either dict, list or tuple"
-            return {k: v for k, v in zip(self.param_names, params)}
+            return dict(zip(self.param_names, params))
 
     def log_unnormalized_likelihood(self, params):
         r"""
@@ -254,7 +254,6 @@ class PSpecLikelihood:
         """
         params = self.params_to_dict(params)
         raise NotImplementedError
-        pass
 
     def __call__(self, *params):
         """Get the log-likelihood for a given set of parameters."""
