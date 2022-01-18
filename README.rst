@@ -18,8 +18,11 @@ Full Documentation
 
 Features
 --------
-* Feature 1
-* Feature 2
+* Ingests data output from ``hera_pspec``: power spectra, covariance matrices and
+  window functions.
+* Agnostic to theory code (i.e. run 21cmFAST or ARES or any other model)
+* Outputs a log-likelihood to be used in parameter inference, but is sampler
+  agnostic.
 
 
 Installation
@@ -49,4 +52,4 @@ new features, and **patch** versions fix bugs and other non-breaking internal ch
 
 If your package depends on ``pspec_likelihood``, set the dependent version like this::
 
-    pspec_likelihood>=0.1<1.0
+    pspec_likelihood>=0.1
