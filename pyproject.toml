@@ -1,8 +1,7 @@
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools_scm]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -18,6 +17,7 @@ norecursedirs = [
 
 [tool.semantic_release]
 version_variable = [
-    'docs/conf.py:version',
+    'src/pspec_likelihood/__init__.py:__version__',
 ]
-version_source="tag"
+upload_to_repository = false
+branch = "main"
