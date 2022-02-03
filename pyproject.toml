@@ -3,3 +3,21 @@ requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "--cov pspec_likelihood --cov-report term-missing --verbose --cov-config=.coveragerc --durations=25"
+testpaths = [
+    "tests",
+]
+norecursedirs = [
+    "dist",
+    "build",
+    ".tox",
+]
+
+[tool.semantic_release]
+version_variable = [
+    'docs/conf.py:version',
+]
+version_source="tag"
