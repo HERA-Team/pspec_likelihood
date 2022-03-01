@@ -12,3 +12,4 @@ docs/_*/*
 \.tox
 .coverage
 pip-wheel-metadata/
+.vscode/

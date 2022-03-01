@@ -1,28 +1,4 @@
-"""Primary module defining container for power spectrum measurements and models.
-
-Functionality that we'd want for an analysis:
-    1) comparing theory / systematics to data on equal footing.
-    2) calculating likelihoods.
-        This is the ultimate goal of this class.
---------------------------------------
-    3) sampling the posterior.
-        Sampler goes outside of this particular class.
-    4) confidence intervals for astrophysics/cosmology.
-        Also outside of this class.
-
-Where do all of these belong?
-
-This class keeps track of power-spectrum measurements
- (and their associated covariances and window functions)
- along with a theoretical model and calculations of the likelihoods
- given this model that propertly account for the window functions.
- For now, this container assumes Gaussian measurement errors and
- thus only keeps track of covariances but this may change in the future.
-
- This class also only considers additive nuisance models.
-
- How do we keep track of sampling?
-"""
+"""Primary module defining container for power spectrum measurements and models."""
 import attr
 import numpy as np
 from cached_property import cached_property
@@ -37,6 +13,13 @@ from .utils import listify
 class PSpecLikelihood:
     r"""Container for power spectrum measurements and models.
 
+    This class keeps track of power-spectrum measurements
+    (and their associated covariances and window functions)
+    along with a theoretical model and calculations of the likelihoods
+    given this model that propertly account for the window functions.
+    For now, this container assumes Gaussian measurement errors and
+    thus only keeps track of covariances but this may change in the future.
+
     Parameters
     ----------
     ps_files : list of str or Path
@@ -46,8 +29,8 @@ class PSpecLikelihood:
         independent.
     theoretical_model : func(k, z, little_h, **params) -> delta_sq [mK^2]
         a function that takes as its arguments a numpy vector of k-values (floats),
-        a bool (little_h), and any number of additional parameters and returns a vector of
-        floats with the same shape as the k-vector. little_h specifies whether k
+        a bool (little_h), and any number of additional parameters and returns a vector
+        of floats with the same shape as the k-vector. little_h specifies whether k
         units are in h/Mpc or 1/Mpc.
     bias_model : func(k, z, little_h, **params) -> delta_sq [mK^2]
         a function that takes in as its arguments a numpy vector of k-values (floats)
@@ -144,7 +127,7 @@ class PSpecLikelihood:
             value within a bin.
 
         Returns
-        ----------
+        -------
         results
             list of power spectrum values corresponding to the bins
         errors
@@ -156,7 +139,8 @@ class PSpecLikelihood:
         # Q: Is little_h a keyword argument of theory_func?
         # Q: Does the bin go from center-width/2 to center+width/2 ?
         # The error is just an order of magnitude, not any precise confidence interval.
-        # If the power spectrum was monotonous, the error would be the maximal deviation.
+        # If the power spectrum was monotonous, the error would be the maximal
+        # deviation.
 
         if method == "bin_center":
             results = self.theoretical_model(
@@ -185,7 +169,8 @@ class PSpecLikelihood:
                 errors.append(error / width)
         else:
             raise ValueError(
-                f"method must be one of 'bin_center', 'two_point' or 'integrate'. Got '{method}'."
+                f"method must be one of 'bin_center', 'two_point' or 'integrate'. "
+                f"Got '{method}'."
             )
 
         return results, errors
@@ -207,8 +192,8 @@ class PSpecLikelihood:
         Returns
         -------
         A vector of floats, p_w = W p_m
-        where p_m is a theoretical model power spectrum, W is the window function applied
-        to that model.
+        where p_m is a theoretical model power spectrum, W is the window function
+        applied to that model.
         """
         # Need to specify appropriate k-averaging.
         # Below, we just have sampling.
@@ -223,14 +208,16 @@ class PSpecLikelihood:
 
     def params_to_dict(self, params):
         r"""
-        Check if params is a list or dictionary. If list convert to dictionary using param_names.
+        Check if params is a list or dictionary.
+
+        If list convert to dictionary using param_names.
 
         Parameters
         ----------
         params : dictionary, list or tuple
 
         Returns
-        ----------
+        -------
         params : dictionary
             params convert to dictionary
         """
@@ -243,18 +230,20 @@ class PSpecLikelihood:
         else:
             if self.param_names is None:
                 raise ValueError(
-                    "To pass params as a sequence, rather than dict, likelihood must be created with param_names"
+                    "To pass params as a sequence, rather than dict, likelihood must be"
+                    " created with param_names"
                 )
             assert isinstance(
                 params, [list, tuple]
             ), "input parameters must be either dict, list or tuple"
-            return {k: v for k, v in zip(self.param_names, params)}
+            return dict(zip(self.param_names, params))
 
     def log_unnormalized_likelihood(self, params):
         r"""
         log-likelihood for set of theoretical and bias parameters.
 
-        Probability of data given a model (this is distinct from a properly normalized posterior).
+        Probability of data given a model (this is distinct from a properly normalized
+        posterior).
 
         Parameters
         ----------
@@ -265,4 +254,7 @@ class PSpecLikelihood:
         """
         params = self.params_to_dict(params)
         raise NotImplementedError
+
+    def __call__(self, *params):
+        """Get the log-likelihood for a given set of parameters."""
         pass

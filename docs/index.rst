@@ -14,7 +14,6 @@ Contents
    tutorials
    license
    api
-   changelog
 
 Indices and tables
 ==================
