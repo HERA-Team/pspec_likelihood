@@ -104,10 +104,10 @@ class DataModelInterface:
 
     redshift: float = attr.ib(converter=float)
     power_spectrum: tp.PowerType = attr.ib(
-        validator=vld_unit(un.mK ** 2), eq=tp.cmp_array
+        validator=vld_unit(un.mK**2), eq=tp.cmp_array
     )
     window_function: np.ndarray = attr.ib(eq=tp.cmp_array, converter=np.array)
-    covariance: tp.CovarianceType = attr.ib(validator=vld_unit(un.mK ** 4))
+    covariance: tp.CovarianceType = attr.ib(validator=vld_unit(un.mK**4))
     theory_model: Callable = attr.ib(validator=attr.validators.is_callable())
     sys_model: Callable = attr.ib(validator=attr.validators.is_callable())
 
@@ -183,7 +183,7 @@ class DataModelInterface:
     def spherical_kbins_obs(self) -> tp.Wavenumber:
         """The spherical k bins of the observation (the edges)."""
         if self.kpar_bins_obs is not None:
-            return np.sqrt(self.kpar_bins_obs ** 2 + self.kperp_bins_obs ** 2)
+            return np.sqrt(self.kpar_bins_obs**2 + self.kperp_bins_obs**2)
         else:
             return self.kperp_bins_obs
 
@@ -191,7 +191,7 @@ class DataModelInterface:
     def spherical_kbins_theory(self) -> tp.Wavenumber:
         """The spherical k bins of the theory (edges)."""
         if self.kpar_bins_theory is not None:
-            return np.sqrt(self.kpar_bins_theory ** 2 + self.kperp_bins_theory ** 2)
+            return np.sqrt(self.kpar_bins_theory**2 + self.kperp_bins_theory**2)
         else:
             return self.kperp_bins_theory
 

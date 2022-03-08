@@ -7,8 +7,8 @@ import attr
 import numpy as np
 from astropy import units as u
 
-PowerType = u.Quantity[u.mK ** 2]
-CovarianceType = u.Quantity[u.mK ** 4]
+PowerType = u.Quantity[u.mK**2]
+CovarianceType = u.Quantity[u.mK**4]
 Wavenumber = u.Quantity["wavenumber"]
 
 cmp_array = attr.cmp_using(eq=np.array_equal)
