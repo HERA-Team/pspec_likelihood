@@ -195,10 +195,47 @@ class DataModelInterface:
         else:
             return self.kperp_bins_theory
 
-    @cached_property
     def kperp_centres(self) -> tp.Wavenumber:
         """Centres of the kperp bins."""
         return (self.kperp_bins_obs[1:] + self.kperp_bins_obs[:-1]) / 2
+
+    @classmethod
+    def uvpspec_from_h5_files(cls
+        band_index: int = 0,
+        field: string = None,
+        datapath_format: string = None,
+        band_name_in_path_string: bool = False):
+        r"""Read UVPSpec object from speified h5 file.
+
+        Parameters
+        ----------
+        band_index
+            Which band (0-indexed) to read, if the file contains multiple
+            bands. Default: 0
+
+        field
+            Which field to read (determines file name).
+
+        datapath_format
+            File name format for h5 files. For example public IDR2 data
+            uses 'pspec_h1c_idr2_field{}.h5'.
+
+        band_name_in_path_string
+            Whether `datapath_format` needs the band as a second number to
+            format the path (e.g. data sets where every band is its own file).
+
+        Returns
+        -------
+        uvp
+            Opened UVPSpec object.
+        """
+        uvp = hp.UVPSpec()
+        if band_name_in_path_string:
+            band_name = str(band_index+1)
+            uvp.read_hdf5(datapath.format(field, band_name))
+        else:
+            uvp.read_hdf5(datapath.format(field))
+        return uvp
 
     @classmethod
     def from_uvpspec(
