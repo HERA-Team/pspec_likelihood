@@ -203,7 +203,7 @@ class DataModelInterface:
         return (self.kperp_bins_obs[1:] + self.kperp_bins_obs[:-1]) / 2
 
     @classmethod
-    def uvpspec_from_h5_files(cls
+    def uvpspec_from_h5_files(cls,
         band_index: int = 0,
         field: string = None,
         datapath_format: string = None,
