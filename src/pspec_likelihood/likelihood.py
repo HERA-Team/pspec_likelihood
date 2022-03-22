@@ -247,7 +247,7 @@ class DataModelInterface:
         set_negative_to_zero: bool = True,
         theory_uses_spherical_k: bool = False,
         **kwargs
-    ):# -> DataModelInterface:
+    ) -> DataModelInterface:
         r"""Extract parameters from UVPSpec object.
 
         Parameters
@@ -298,6 +298,8 @@ class DataModelInterface:
         if set_negative_to_zero:
             cls.power_spectrum[cls.power_spectrum < 0] = 0
 
+        # Leaving this here until I got to test the implementation
+        raise NotImplementedError("Not yet, sorry!")
 
     def _kconvert(self, k):
         return k.to_value(
