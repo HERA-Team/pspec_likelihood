@@ -197,6 +197,7 @@ class DataModelInterface:
         else:
             return self.kperp_bins_theory
 
+    @cached_property
     def kperp_centres(self) -> tp.Wavenumber:
         """Centres of the kperp bins."""
         return (self.kperp_bins_obs[1:] + self.kperp_bins_obs[:-1]) / 2
