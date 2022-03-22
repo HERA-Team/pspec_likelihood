@@ -32,6 +32,8 @@ class DataModelInterface:
     ----------
     cosmology
         The :class:`astropy.cosmology.FLRW` object defining the cosmology.
+    redshift
+        The (mean) redshift of the measured power spectrum.
     power_spectrum
         The 1D or 2D power spectrum values of the observation in squared temperature
         units. Whether 1D or 2D, this array is 1D (i.e. flattened).
@@ -239,13 +241,62 @@ class DataModelInterface:
 
     @classmethod
     def from_uvpspec(
-        cls, uvpspec, theory_uses_spherical_k: bool = False, **kwargs
-    ) -> DataModelInterface:
-        """Construct the ModelDataInterface from a UVPSpec object."""
-        if theory_uses_spherical_k:
-            grouping.spherical_average(uvpspec, **kwargs)
+        cls, uvp,
+        band_index: int = 0,
+        set_negative_to_zero: bool = True,
+        theory_uses_spherical_k: bool = False,
+        **kwargs
+    ):# -> DataModelInterface:
+        r"""Extract parameters from UVPSpec object.
 
-        raise NotImplementedError("Not yet, sorry!")
+        Parameters
+        ----------
+        theory_uses_spherical_k
+            Wait shouldn't this be a class variable?
+
+        band_index
+            Which band (0-indexed) to read, if the file contains multiple
+            bands. Default: 0
+
+        set_negative_to_zero
+            Whether to treat negative power spectrum measurements as 0.
+            Default: True
+
+        Returns
+        -------
+        ???
+            DataModelInterface?
+        """
+        if not cls.theory_uses_spherical_k:
+            raise NotImplementedError("Are we sure this works?")
+        # Access the right band
+        band_key = uvp.get_all_keys()[band_index]
+        spw_index = uvp.spw_array[band_index]
+        # Get redshift (i.e. spherical window)
+        # Note: get_spw_ranges returns min and max frequency as [:2]
+        spw_frequencies = uvp.get_spw_ranges()[spw_index][:2]
+        cls.redshift = uvp.cosmo.f2z(np.mean(spw_frequencies))
+        # Get wavenumbers
+        cls.kperp_bins_obs = uvp.get_kperps(spw_index)
+        cls.kpar_bins_obs = uvp.get_kparas(spw_index)
+        # Get measurements, shape seems to always be (1, ...).
+        # Storing only the real components.
+        # Power spectra \Delta^2
+        cls.power_spectrum = uvp.get_data(band_key).real.copy() #todo: Is the copy() needed?
+        assert np.shape(cls.power_spectrum)[0] == 0
+        cls.power_spectrum = cls.power_spectrum[0]
+        # Covariance matrix
+        cls.covariance = uvp.get_cov(band_key).real.copy() #todo: Is the copy() needed?
+        assert np.shape(cls.covariance)[0] == 0
+        cls.covariance = cls.covariance[0]
+        # Window functions
+        cls.window_function = uvp.get_window_function(band_key)
+        assert np.shape(cls.window_function)[0] == 0
+        cls.window_function = cls.window_function[0]
+
+        if set_negative_to_zero:
+            cls.power_spectrum[cls.power_spectrum < 0] = 0
+
 
     def _kconvert(self, k):
         return k.to_value(
