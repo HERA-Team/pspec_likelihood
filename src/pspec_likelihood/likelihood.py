@@ -10,6 +10,7 @@ import attr
 import numpy as np
 from cached_property import cached_property
 from hera_pspec import grouping
+import hera_pspec as hp
 from scipy.integrate import quad
 from scipy.stats import multivariate_normal
 
@@ -214,7 +215,7 @@ class DataModelInterface:
         ----------
         band_index
             Which band (0-indexed) to read, if the file contains multiple
-            bands. Default: 0
+            bands. Optional if not band_name_in_path_string. Default: 0
 
         field
             Which field to read (determines file name).
@@ -235,9 +236,9 @@ class DataModelInterface:
         uvp = hp.UVPSpec()
         if band_name_in_path_string:
             band_name = str(band_index+1)
-            uvp.read_hdf5(datapath.format(field, band_name))
+            uvp.read_hdf5(datapath_format.format(field, band_name))
         else:
-            uvp.read_hdf5(datapath.format(field))
+            uvp.read_hdf5(datapath_format.format(field))
         return uvp
 
     @classmethod
@@ -253,7 +254,8 @@ class DataModelInterface:
         Parameters
         ----------
         theory_uses_spherical_k
-            Wait shouldn't this be a class variable?
+            If True, the theory function only accepts spherical k, rather than
+            cylindrical k.
 
         band_index
             Which band (0-indexed) to read, if the file contains multiple
@@ -268,8 +270,10 @@ class DataModelInterface:
         ???
             DataModelInterface?
         """
-        if not cls.theory_uses_spherical_k:
-            raise NotImplementedError("Are we sure this works?")
+        # Check theory_uses_spherical_k
+        if theory_uses_spherical_k:
+            raise NotImplementedError("Not implemented theory_uses_spherical_k")
+        cls.theory_uses_spherical_k = theory_uses_spherical_k
         # Access the right band
         band_key = uvp.get_all_keys()[band_index]
         spw_index = uvp.spw_array[band_index]
@@ -284,22 +288,21 @@ class DataModelInterface:
         # Storing only the real components.
         # Power spectra \Delta^2
         cls.power_spectrum = uvp.get_data(band_key).real.copy() #todo: Is the copy() needed?
-        assert np.shape(cls.power_spectrum)[0] == 0
+        assert np.shape(cls.power_spectrum)[0] == 1
         cls.power_spectrum = cls.power_spectrum[0]
         # Covariance matrix
         cls.covariance = uvp.get_cov(band_key).real.copy() #todo: Is the copy() needed?
-        assert np.shape(cls.covariance)[0] == 0
+        assert np.shape(cls.covariance)[0] == 1
         cls.covariance = cls.covariance[0]
         # Window functions
         cls.window_function = uvp.get_window_function(band_key)
-        assert np.shape(cls.window_function)[0] == 0
+        assert np.shape(cls.window_function)[0] == 1
         cls.window_function = cls.window_function[0]
 
         if set_negative_to_zero:
             cls.power_spectrum[cls.power_spectrum < 0] = 0
 
-        # Leaving this here until I got to test the implementation
-        raise NotImplementedError("Not yet, sorry!")
+        return cls
 
     def _kconvert(self, k):
         return k.to_value(
