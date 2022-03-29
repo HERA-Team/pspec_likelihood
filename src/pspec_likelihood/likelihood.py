@@ -44,25 +44,24 @@ class DataModelInterface:
         The data covariance matrix. If 2D, must be a square matrix with each dimension
         the same length as ``power_spectrum``. If 1D, the covariance is assumed to be
         diagonal, and must have the same length as ``power_spectrum``.
-    kperp_bins_obs
-        The k-perpendicular bins of the observation. These provide the bin *centres*,
-        and so there should be the same number as power spectrum values.
-        If ``kpar_bins_obs`` is not provided, ``kperp_bins_obs`` is treated as the
-        spherically-averaged k bins.
     kpar_bins_obs
-        If provided, the k-parallel bins of the observation.
-        See notes on ``kperp_bins_obs``. If not provided, treat ``kperp_bins_obs``
+        The k-parallel bins of the observation. See notes on ``kperp_bins_obs``.
+        If ``kperp_bins_obs`` is not provided, treat ``kpar_bins_obs`` as spherically
+        averaged.
+    kperp_bins_obs
+        If provided, the k-perpendicular bins of the observation. These provide the bin
+        *centres*, and so there should be the same number as power spectrum values.
+        If not provided, ``kpar_bins_obs`` is treated as the spherically-averaged
+        k bins.
+    kpar_bins_theory
+        The k-parallel bins of the theory. See notes on ``kperp_bins_theory``.
+        If ``kperp_bins_theory`` not provided, treat ``kpar_bins_theory``
         as spherical.
     kperp_bins_theory
-        The k-perpendicular bins of the theory. These provide the bin *centres*, and
-        so there should be the same number as the second dimension of the window
-        function.
-        If ``kpar_bins_theory`` is not provided, ``kperp_bins_theory`` is treated as the
+        If provided, the k-perpendicular bins of the theory. These provide the bin
+        *centres*, and so there should be the same number as the second dimension of the
+        window function. If not provided, ``kpar_bins_theory`` is treated as the
         spherically-averaged k bins.
-    kpar_bins_theory
-        If provided, the k-parallel bins of the theory.
-        See notes on ``kperp_bins_theory``. If not provided, treat ``kperp_bins_theory``
-        as spherical.
     kperp_widths_theory
         If provided, the k-perpendicular bin widths associated with each bin. It is
         assumed that the bins are in the (linear-space) centre. Only required if
@@ -114,10 +113,10 @@ class DataModelInterface:
     cosmology: csm.FLRW = attr.ib(
         csm.Planck18, validator=attr.validators.instance_of(csm.FLRW)
     )
-    kperp_bins_obs: tp.Wavenumber = attr.ib()
-    kpar_bins_obs: tp.Wavenumber | None = attr.ib()
-    kperp_bins_theory: tp.Wavenumber = attr.ib()
+    kpar_bins_obs: tp.Wavenumber = attr.ib()
+    kperp_bins_obs: tp.Wavenumber | None = attr.ib()
     kpar_bins_theory: tp.Wavenumber = attr.ib()
+    kperp_bins_theory: tp.Wavenumber | None = attr.ib()
     kperp_widths_theory: tp.Wavenumber | None = attr.ib()
     kpar_widths_theory: tp.Wavenumber | None = attr.ib()
 
@@ -136,8 +135,8 @@ class DataModelInterface:
     )
     apply_window_to_systematics: bool = attr.ib(True, converter=bool)
 
-    @kperp_bins_obs.validator
-    @kperp_bins_theory.validator
+    @kpar_bins_obs.validator
+    @kpar_bins_theory.validator
     def _k_validator(self, att, val):
         if not np.isrealobj(val):
             raise TypeError(f"{att.name} must be real!")
@@ -147,8 +146,8 @@ class DataModelInterface:
         if val.shape != self.power_spectrum.shape:
             raise ValueError(f"{att.name} must have same shape as the power spectrum")
 
-    @kpar_bins_obs.validator
-    @kpar_bins_theory.validator
+    @kperp_bins_obs.validator
+    @kperp_bins_theory.validator
     @kpar_widths_theory.validator
     @kperp_widths_theory.validator
     def _opt_k_vld(self, att, val):
@@ -182,18 +181,18 @@ class DataModelInterface:
     @cached_property
     def spherical_kbins_obs(self) -> tp.Wavenumber:
         """The spherical k bins of the observation (the edges)."""
-        if self.kpar_bins_obs is not None:
+        if self.kperp_bins_obs is not None:
             return np.sqrt(self.kpar_bins_obs**2 + self.kperp_bins_obs**2)
         else:
-            return self.kperp_bins_obs
+            return self.kpar_bins_obs
 
     @cached_property
     def spherical_kbins_theory(self) -> tp.Wavenumber:
         """The spherical k bins of the theory (edges)."""
-        if self.kpar_bins_theory is not None:
+        if self.kperp_bins_theory is not None:
             return np.sqrt(self.kpar_bins_theory**2 + self.kperp_bins_theory**2)
         else:
-            return self.kperp_bins_theory
+            return self.kpar_bins_theory
 
     @cached_property
     def kperp_centres(self) -> tp.Wavenumber:
