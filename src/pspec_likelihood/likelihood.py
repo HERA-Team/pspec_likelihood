@@ -310,15 +310,17 @@ class DataModelInterface:
         # Storing only the real components.
         # Power spectra \Delta^2
         power_spectrum = uvp.get_data(band_key).real.copy() #todo: Is the copy() needed?
-        assert np.shape(power_spectrum) == (N_perp, N_par), "Shape mismatch: {0:} != ({1:}, {2:})".format(np.shape(power_spectrum), N_perp, N_par)
-        power_spectrum = power_spectrum[0]
+        assert np.shape(power_spectrum) == (N_perp, N_par), ("PS shape"
+            "mismatch: {0:} != ({1:}, {2:})".format(
+                np.shape(power_spectrum), N_perp, N_par))
+        power_spectrum = power_spectrum.flatten()
         # Covariance matrix
         covariance = uvp.get_cov(band_key).real.copy() #todo: Is the copy() needed?
-        assert np.shape(covariance)[0] == 1
+        assert np.shape(covariance) == (1, N_par, N_par) #todo: Only for non sperically-averaged data!
         covariance = covariance[0]
         # Window functions
         window_function = uvp.get_window_function(band_key)
-        assert np.shape(window_function)[0] == 1
+        assert np.shape(window_function) == (1, N_par, N_par) #todo: Only for non sperically-averaged data!
         window_function = window_function[0]
 
         if set_negative_to_zero:
