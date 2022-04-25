@@ -203,7 +203,7 @@ class DataModelInterface:
         return (self.kperp_bins_obs[1:] + self.kperp_bins_obs[:-1]) / 2
 
     @classmethod
-    def uvpspec_from_h5_files(cls,
+    def uvpspec_from_h5_files(self,
         band_index: int = 0,
         field: string = None,
         datapath_format: string = None,
@@ -246,6 +246,12 @@ class DataModelInterface:
         band_index: int = 0,
         set_negative_to_zero: bool = True,
         theory_uses_spherical_k: bool = False,
+        theory_model = None,
+        sys_model = None,
+        kpar_bins_theory = None,
+        kperp_bins_theory = None,
+        kperp_widths_theory = None,
+        kpar_widths_theory = None,
         **kwargs
     ) -> DataModelInterface:
         r"""Extract parameters from UVPSpec object.
@@ -272,19 +278,19 @@ class DataModelInterface:
         # Check theory_uses_spherical_k
         if theory_uses_spherical_k:
             raise NotImplementedError("Not implemented theory_uses_spherical_k")
-        cls.theory_uses_spherical_k = theory_uses_spherical_k
+        theory_uses_spherical_k = theory_uses_spherical_k
         # Access the right band
         band_key = uvp.get_all_keys()[band_index]
         spw_index = uvp.spw_array[band_index]
         # Get redshift (i.e. spherical window)
         # Note: get_spw_ranges returns min and max frequency as [:2]
         spw_frequencies = uvp.get_spw_ranges()[spw_index][:2]
-        cls.redshift = uvp.cosmo.f2z(np.mean(spw_frequencies))
+        redshift = uvp.cosmo.f2z(np.mean(spw_frequencies))
         # Get wavenumbers
-        cls.kperp_bins_obs = uvp.get_kperps(spw_index)
-        N_perp = len(cls.kperp_bins_obs)
-        cls.kpar_bins_obs = uvp.get_kparas(spw_index)
-        N_par = len(cls.kpar_bins_obs)
+        kperp_bins_obs = uvp.get_kperps(spw_index)
+        N_perp = len(kperp_bins_obs)
+        kpar_bins_obs = uvp.get_kparas(spw_index)
+        N_par = len(kpar_bins_obs)
         # Check if the data has been spherically averaged
         spherically_averaged = 'Spherically averaged with hera_pspec' in uvp.history
         if spherically_averaged:
@@ -293,7 +299,7 @@ class DataModelInterface:
             assert np.isclose(uvp.get_kperps(0)[0], 0, atol=1e-11, rtol=0), \
                 "data says it is spherically averaged but uvp.get_kperps(0)[0] is >> 0"
             # By convention, kperp is set to None for spherically averaged data
-            cls.kperp_bins_obs = None
+            kperp_bins_obs = None
             N_perp = 1
 
         # Get measurements, shape seems to always be (N_perp, N_par).
@@ -303,22 +309,35 @@ class DataModelInterface:
                 " window_function are not implemented yet.")
         # Storing only the real components.
         # Power spectra \Delta^2
-        cls.power_spectrum = uvp.get_data(band_key).real.copy() #todo: Is the copy() needed?
-        assert np.shape(cls.power_spectrum) == (N_perp, N_par), "Shape mismatch: {0:} != ({1:}, {2:})".format(np.shape(cls.power_spectrum), N_perp, N_par)
-        cls.power_spectrum = cls.power_spectrum[0]
+        power_spectrum = uvp.get_data(band_key).real.copy() #todo: Is the copy() needed?
+        assert np.shape(power_spectrum) == (N_perp, N_par), "Shape mismatch: {0:} != ({1:}, {2:})".format(np.shape(power_spectrum), N_perp, N_par)
+        power_spectrum = power_spectrum[0]
         # Covariance matrix
-        cls.covariance = uvp.get_cov(band_key).real.copy() #todo: Is the copy() needed?
-        assert np.shape(cls.covariance)[0] == 1
-        cls.covariance = cls.covariance[0]
+        covariance = uvp.get_cov(band_key).real.copy() #todo: Is the copy() needed?
+        assert np.shape(covariance)[0] == 1
+        covariance = covariance[0]
         # Window functions
-        cls.window_function = uvp.get_window_function(band_key)
-        assert np.shape(cls.window_function)[0] == 1
-        cls.window_function = cls.window_function[0]
+        window_function = uvp.get_window_function(band_key)
+        assert np.shape(window_function)[0] == 1
+        window_function = window_function[0]
 
         if set_negative_to_zero:
-            cls.power_spectrum[cls.power_spectrum < 0] = 0
+            power_spectrum[power_spectrum < 0] = 0
 
-        return cls
+        return DataModelInterface(
+            theory_uses_spherical_k = theory_uses_spherical_k,
+            redshift = redshift,
+            kperp_bins_obs = kperp_bins_obs,
+            kpar_bins_obs = kpar_bins_obs,
+            power_spectrum = power_spectrum*un.mK**2,
+            covariance = covariance*un.mK**4,
+            window_function = window_function,
+            theory_model = theory_model,
+            sys_model = sys_model,
+            kpar_bins_theory = kpar_bins_theory,
+            kperp_bins_theory = kperp_bins_theory,
+            kperp_widths_theory = kperp_widths_theory,
+            kpar_widths_theory = kpar_widths_theory)
 
     def _kconvert(self, k):
         return k.to_value(
