@@ -282,12 +282,29 @@ class DataModelInterface:
         cls.redshift = uvp.cosmo.f2z(np.mean(spw_frequencies))
         # Get wavenumbers
         cls.kperp_bins_obs = uvp.get_kperps(spw_index)
+        N_perp = len(cls.kperp_bins_obs)
         cls.kpar_bins_obs = uvp.get_kparas(spw_index)
-        # Get measurements, shape seems to always be (1, ...).
+        N_par = len(cls.kpar_bins_obs)
+        # Check if the data has been spherically averaged
+        spherically_averaged = 'Spherically averaged with hera_pspec' in uvp.history
+        if spherically_averaged:
+            assert len(uvp.get_kperps(0)) == 1, \
+                "data says it is spherically averaged but len(uvp.get_kperps(0)) is >1"
+            assert np.isclose(uvp.get_kperps(0)[0], 0, atol=1e-11, rtol=0), \
+                "data says it is spherically averaged but uvp.get_kperps(0)[0] is >> 0"
+            # By convention, kperp is set to None for spherically averaged data
+            cls.kperp_bins_obs = None
+            N_perp = 1
+
+        # Get measurements, shape seems to always be (N_perp, N_par).
+        if not spherically_averaged:
+            raise NotImplementedError("For non-spherically-averaged data, the"
+                " power spectrum shape is broken, and the of covariance and"
+                " window_function are not implemented yet.")
         # Storing only the real components.
         # Power spectra \Delta^2
         cls.power_spectrum = uvp.get_data(band_key).real.copy() #todo: Is the copy() needed?
-        assert np.shape(cls.power_spectrum)[0] == 1
+        assert np.shape(cls.power_spectrum) == (N_perp, N_par), "Shape mismatch: {0:} != ({1:}, {2:})".format(np.shape(cls.power_spectrum), N_perp, N_par)
         cls.power_spectrum = cls.power_spectrum[0]
         # Covariance matrix
         cls.covariance = uvp.get_cov(band_key).real.copy() #todo: Is the copy() needed?
