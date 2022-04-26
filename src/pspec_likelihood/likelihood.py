@@ -288,7 +288,6 @@ class DataModelInterface:
         redshift = uvp.cosmo.f2z(np.mean(spw_frequencies))
         # Get wavenumbers
         kperp_bins_obs = uvp.get_kperps(spw_index)
-        N_perp = len(kperp_bins_obs)
         kpar_bins_obs = uvp.get_kparas(spw_index)
         N_par = len(kpar_bins_obs)
         # Check if the data has been spherically averaged
@@ -301,27 +300,29 @@ class DataModelInterface:
             # By convention, kperp is set to None for spherically averaged data
             kperp_bins_obs = None
             N_perp = 1
+        else:
+            # kperp_bins_obs contains wavenumbers of redundant baselines
+            # that are already correlated below -- todo:not sure about this
+            kperp_bins_obs = kperp_bins_obs[::2]
+            N_perp = len(kperp_bins_obs)
 
         # Get measurements, shape seems to always be (N_perp, N_par).
-        if not spherically_averaged:
-            raise NotImplementedError("For non-spherically-averaged data, the"
-                " power spectrum shape is broken, and the of covariance and"
-                " window_function are not implemented yet.")
         # Storing only the real components.
         # Power spectra \Delta^2
         power_spectrum = uvp.get_data(band_key).real.copy() #todo: Is the copy() needed?
         assert np.shape(power_spectrum) == (N_perp, N_par), ("PS shape"
-            "mismatch: {0:} != ({1:}, {2:})".format(
+            " mismatch: {0:} != ({1:}, {2:})".format(
                 np.shape(power_spectrum), N_perp, N_par))
         power_spectrum = power_spectrum.flatten()
         # Covariance matrix
         covariance = uvp.get_cov(band_key).real.copy() #todo: Is the copy() needed?
-        assert np.shape(covariance) == (1, N_par, N_par) #todo: Only for non sperically-averaged data!
-        covariance = covariance[0]
+        assert np.shape(covariance) == (N_perp, N_par, N_par) #todo: Only for non sperically-averaged data!
+        flat_shape = (np.shape(covariance)[0]*np.shape(covariance)[1], np.shape(covariance)[2])
+        covariance = covariance.reshape(flat_shape)
         # Window functions
         window_function = uvp.get_window_function(band_key)
-        assert np.shape(window_function) == (1, N_par, N_par) #todo: Only for non sperically-averaged data!
-        window_function = window_function[0]
+        assert np.shape(window_function) == (N_perp, N_par, N_par) #todo: Only for non sperically-averaged data!
+        window_function = window_function.reshape(flat_shape)
 
         if set_negative_to_zero:
             power_spectrum[power_spectrum < 0] = 0
