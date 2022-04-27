@@ -13,7 +13,7 @@ from hera_pspec import grouping
 import hera_pspec as hp
 from scipy.integrate import quad
 from scipy.stats import multivariate_normal
-
+from scipy.linalg import block_diag
 from . import types as tp
 from .types import vld_unit
 
@@ -275,57 +275,74 @@ class DataModelInterface:
         ???
             DataModelInterface?
         """
-        # Check theory_uses_spherical_k
-        if theory_uses_spherical_k:
-            raise NotImplementedError("Not implemented theory_uses_spherical_k")
-        theory_uses_spherical_k = theory_uses_spherical_k
         # Access the right band
+        n_bands = len(uvp.get_all_keys())
         band_key = uvp.get_all_keys()[band_index]
         spw_index = uvp.spw_array[band_index]
         # Get redshift (i.e. spherical window)
-        # Note: get_spw_ranges returns min and max frequency as [:2]
+        # Note: get_spw_ranges returns minimum and maximum frequenc
+        #       as first two elements i.e. [:2]
         spw_frequencies = uvp.get_spw_ranges()[spw_index][:2]
         redshift = uvp.cosmo.f2z(np.mean(spw_frequencies))
-        # Get wavenumbers
-        kperp_bins_obs = uvp.get_kperps(spw_index)
-        kpar_bins_obs = uvp.get_kparas(spw_index)
-        N_par = len(kpar_bins_obs)
-        # Check if the data has been spherically averaged
+        # Get wavenumbers parallel to line of sight
+        kparas = uvp.get_kparas(spw_index)
+        N_para = len(kparas)
+        # Get wavenumbers perpendicular to line of sight
+        # Check if the data has been spherically averaged, in that
+        # case we use kpar by convention and kperp is set to None.
         spherically_averaged = 'Spherically averaged with hera_pspec' in uvp.history
         if spherically_averaged:
             assert len(uvp.get_kperps(0)) == 1, \
                 "data says it is spherically averaged but len(uvp.get_kperps(0)) is >1"
             assert np.isclose(uvp.get_kperps(0)[0], 0, atol=1e-11, rtol=0), \
                 "data says it is spherically averaged but uvp.get_kperps(0)[0] is >> 0"
-            # By convention, kperp is set to None for spherically averaged data
-            kperp_bins_obs = None
             N_perp = 1
+            kperp_bins_obs = None
         else:
-            # kperp_bins_obs contains wavenumbers of redundant baselines
-            # that are already correlated below -- todo:not sure about this
-            kperp_bins_obs = kperp_bins_obs[::2]
-            N_perp = len(kperp_bins_obs)
+            # Otherwise get kperp from uvp. Note that get_kperps() returns
+            # all the baselines, including the redundant ones that are
+            # combined in the power spectrum data.
+            kperps = uvp.get_kperps(spw_index)
+            N_perp = len(kperps)
+            # Todo: I have only checked this for one example, but there
+            # out of the 24 numbers, the 2nd half corresponded to the
+            # 2nd (redundant) set of baselines (check with uvp.blpair_array)
+            # so we cut off the part belonging to the other band_key
+            N_b = int(N_perp/n_bands)
+            kperps = kperps[band_index*N_b:(band_index+1)*N_b]
+            N_perp = len(kperps)
+            kperp_bins_obs = np.repeat(kperps, N_para)
+        # Tile parallel wavenumbers correspondingly
+        kpar_bins_obs = np.tile(kparas, N_perp)
 
-        # Get measurements, shape seems to always be (N_perp, N_par).
-        # Storing only the real components.
-        # Power spectra \Delta^2
-        power_spectrum = uvp.get_data(band_key).real.copy() #todo: Is the copy() needed?
-        assert np.shape(power_spectrum) == (N_perp, N_par), ("PS shape"
+        # Get the dimensionless power spectra \Delta^2 (units mK**2) and
+        # flatten the shape (N_perp, N_para) to (N_perp*N_para), index such
+        # that k_par changes the fastest.
+        power_spectrum = uvp.get_data(band_key).real.copy()
+        assert np.shape(power_spectrum) == (N_perp, N_para), ("PS shape"
             " mismatch: {0:} != ({1:}, {2:})".format(
-                np.shape(power_spectrum), N_perp, N_par))
-        power_spectrum = power_spectrum.flatten()
-        # Covariance matrix
-        covariance = uvp.get_cov(band_key).real.copy() #todo: Is the copy() needed?
-        assert np.shape(covariance) == (N_perp, N_par, N_par) #todo: Only for non sperically-averaged data!
-        flat_shape = (np.shape(covariance)[0]*np.shape(covariance)[1], np.shape(covariance)[2])
-        covariance = covariance.reshape(flat_shape)
-        # Window functions
-        window_function = uvp.get_window_function(band_key)
-        assert np.shape(window_function) == (N_perp, N_par, N_par) #todo: Only for non sperically-averaged data!
-        window_function = window_function.reshape(flat_shape)
+                np.shape(power_spectrum), N_perp, N_para))
+        power_spectrum = power_spectrum.reshape((N_perp*N_para), order="C")
+        # Todo: This is a bit unintuitive, check if this is the right way round!
+        # Get the covariance matrix (units mK**4) of the power spectrum. Since
+        # values with different k_perp are uncorrelated, this becomes a
+        # block-diagonal on the (N_perp*N_para)-long reshaped axis.
+        # get_cov() essentially returns a list of these N_perp blocks, each
+        # of shape (N_para, N_para).
+        cov_3d = uvp.get_cov(band_key).real.copy()
+        assert np.shape(cov_3d) == (N_perp, N_para, N_para)
+        covariance = block_diag(*cov_3d)
+        assert np.shape(covariance) == (N_perp*N_para, N_perp*N_para)
+        # Window functions -- same deal as with the covariance. Block diagonal
+        # matrix where each block is the k_par window function for one k_perp.
+        wf_3d = uvp.get_window_function(band_key)
+        assert np.shape(wf_3d) == (N_perp, N_para, N_para)
+        window_function = block_diag(*wf_3d)
+        assert np.shape(window_function) == (N_perp*N_para, N_perp*N_para)
 
         if set_negative_to_zero:
             power_spectrum[power_spectrum < 0] = 0
+
 
         return DataModelInterface(
             theory_uses_spherical_k = theory_uses_spherical_k,
