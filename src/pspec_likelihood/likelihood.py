@@ -7,10 +7,11 @@ from typing import Callable, Literal, Sequence
 import astropy.cosmology as csm
 import astropy.units as un
 import attr
+import hera_pspec as hp
 import numpy as np
 from cached_property import cached_property
-from hera_pspec import grouping
 from scipy.integrate import quad
+from scipy.linalg import block_diag
 from scipy.stats import multivariate_normal
 
 from . import types as tp
@@ -32,6 +33,8 @@ class DataModelInterface:
     ----------
     cosmology
         The :class:`astropy.cosmology.FLRW` object defining the cosmology.
+    redshift
+        The (mean) redshift of the measured power spectrum.
     power_spectrum
         The 1D or 2D power spectrum values of the observation in squared temperature
         units. Whether 1D or 2D, this array is 1D (i.e. flattened).
@@ -200,14 +203,158 @@ class DataModelInterface:
         return (self.kperp_bins_obs[1:] + self.kperp_bins_obs[:-1]) / 2
 
     @classmethod
-    def from_uvpspec(
-        cls, uvpspec, theory_uses_spherical_k: bool = False, **kwargs
-    ) -> DataModelInterface:
-        """Construct the ModelDataInterface from a UVPSpec object."""
-        if theory_uses_spherical_k:
-            grouping.spherical_average(uvpspec, **kwargs)
+    def uvpspec_from_h5_files(
+        cls,
+        band_index: int = 0,
+        field: str | None = None,
+        datapath_format: str | None = None,
+        band_name_in_path_string: bool = False,
+    ):
+        r"""Read UVPSpec object from specified h5 file.
 
-        raise NotImplementedError("Not yet, sorry!")
+        Parameters
+        ----------
+        band_index
+            Which band (0-indexed) to read, if the file contains multiple
+            bands. Optional if not band_name_in_path_string.
+
+        field
+            Which field to read (determines file name).
+
+        datapath_format
+            File name format for h5 files. For example public IDR2 data
+            uses 'pspec_h1c_idr2_field{}.h5'.
+
+        band_name_in_path_string
+            Whether `datapath_format` needs the band as a second number to
+            format the path (e.g. data sets where every band is its own file).
+
+        Returns
+        -------
+        uvp
+            Opened UVPSpec object.
+        """
+        uvp = hp.UVPSpec()
+        if band_name_in_path_string:
+            band_name = str(band_index + 1)
+            uvp.read_hdf5(datapath_format.format(field, band_name))
+        else:
+            uvp.read_hdf5(datapath_format.format(field))
+        return uvp
+
+    @classmethod
+    def from_uvpspec(
+        cls,
+        uvp,
+        band_index: int = 0,
+        set_negative_to_zero: bool = True,
+        theory_uses_spherical_k: bool = False,
+        **kwargs,
+    ) -> DataModelInterface:
+        r"""Extract parameters from UVPSpec object.
+
+        Parameters
+        ----------
+        theory_uses_spherical_k
+            If True, the theory function only accepts spherical k, rather than
+            cylindrical k.
+
+        band_index
+            Which band (0-indexed) to read, if the file contains multiple
+            bands.
+
+        set_negative_to_zero
+            Whether to treat negative power spectrum measurements as 0.
+            Default: True
+
+        Returns
+        -------
+        ???
+            DataModelInterface?
+        """
+        # Access the right band
+        n_bands = len(uvp.get_all_keys())
+        band_key = uvp.get_all_keys()[band_index]
+        spw_index = uvp.spw_array[band_index]
+        # Get redshift (i.e. spherical window)
+        # Note: get_spw_ranges returns minimum and maximum frequenc
+        #       as first two elements i.e. [:2]
+        spw_frequencies = uvp.get_spw_ranges()[spw_index][:2]
+        redshift = uvp.cosmo.f2z(np.mean(spw_frequencies))
+        # Get wavenumbers parallel to line of sight
+        kparas = uvp.get_kparas(spw_index)
+        n_para = len(kparas)
+        # Get wavenumbers perpendicular to line of sight
+        # Check if the data has been spherically averaged, in that
+        # case we use kpar by convention and kperp is set to None.
+        spherically_averaged = "Spherically averaged with hera_pspec" in uvp.history
+        if spherically_averaged:
+            assert (
+                len(uvp.get_kperps(0)) == 1
+            ), "data says it is spherically averaged but len(uvp.get_kperps(0)) is >1"
+            assert np.isclose(
+                uvp.get_kperps(0)[0], 0, atol=1e-11, rtol=0
+            ), "data says it is spherically averaged but uvp.get_kperps(0)[0] is >> 0"
+            n_perp = 1
+            kperp_bins_obs = None
+        else:
+            # Otherwise get kperp from uvp. Note that get_kperps() returns
+            # all the baselines, including the redundant ones that are
+            # combined in the power spectrum data.
+            kperps = uvp.get_kperps(spw_index)
+            n_perp = len(kperps)
+            # Todo: I have only checked this for one example, but there
+            # out of the 24 numbers, the 2nd half corresponded to the
+            # 2nd (redundant) set of baselines (check with uvp.blpair_array)
+            # so we cut off the part belonging to the other band_key
+            n_b = int(n_perp / n_bands)
+            kperps = kperps[band_index * n_b : (band_index + 1) * n_b]
+            n_perp = len(kperps)
+            kperp_bins_obs = np.repeat(kperps, n_para)
+        # Tile parallel wavenumbers correspondingly
+        kpar_bins_obs = np.tile(kparas, n_perp)
+
+        # Get the dimensionless power spectra \Delta^2 (units mK**2) and
+        # flatten the shape (N_perp, N_para) to (N_perp*N_para), index such
+        # that k_par changes the fastest.
+        power_spectrum = uvp.get_data(band_key).real.copy()
+        assert np.shape(power_spectrum) == (
+            n_perp,
+            n_para,
+        ), "PS shape" " mismatch: {} != ({}, {})".format(
+            np.shape(power_spectrum), n_perp, n_para
+        )
+        power_spectrum = power_spectrum.reshape((n_perp * n_para), order="C")
+        # Todo: This is a bit unintuitive, check if this is the right way round!
+        # Get the covariance matrix (units mK**4) of the power spectrum. Since
+        # values with different k_perp are uncorrelated, this becomes a
+        # block-diagonal on the (N_perp*N_para)-long reshaped axis.
+        # get_cov() essentially returns a list of these N_perp blocks, each
+        # of shape (N_para, N_para).
+        cov_3d = uvp.get_cov(band_key).real.copy()
+        assert np.shape(cov_3d) == (n_perp, n_para, n_para)
+        covariance = block_diag(*cov_3d)
+        assert np.shape(covariance) == (n_perp * n_para, n_perp * n_para)
+        # Window functions -- same deal as with the covariance. Block diagonal
+        # matrix where each block is the k_par window function for one k_perp.
+        wf_3d = uvp.get_window_function(band_key)
+        assert np.shape(wf_3d) == (n_perp, n_para, n_para)
+        window_function = block_diag(*wf_3d)
+        assert np.shape(window_function) == (n_perp * n_para, n_perp * n_para)
+
+        if set_negative_to_zero:
+            power_spectrum[power_spectrum < 0] = 0
+
+        return DataModelInterface(
+            theory_uses_spherical_k=theory_uses_spherical_k,
+            redshift=redshift,
+            kperp_bins_obs=kperp_bins_obs,
+            kpar_bins_obs=kpar_bins_obs,
+            power_spectrum=power_spectrum * un.mK**2,
+            covariance=covariance * un.mK**4,
+            window_function=window_function,
+            **kwargs,
+        )
 
     def _kconvert(self, k):
         return k.to_value(
