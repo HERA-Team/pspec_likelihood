@@ -203,18 +203,18 @@ class DataModelInterface:
         return (self.kperp_bins_obs[1:] + self.kperp_bins_obs[:-1]) / 2
 
     @classmethod
-    def uvpspec_from_h5_files(self,
+    def uvpspec_from_h5_files(cls,
         band_index: int = 0,
-        field: string = None,
-        datapath_format: string = None,
+        field: str | None = None,
+        datapath_format: str | None = None,
         band_name_in_path_string: bool = False):
-        r"""Read UVPSpec object from speified h5 file.
+        r"""Read UVPSpec object from specified h5 file.
 
         Parameters
         ----------
         band_index
             Which band (0-indexed) to read, if the file contains multiple
-            bands. Optional if not band_name_in_path_string. Default: 0
+            bands. Optional if not band_name_in_path_string.
 
         field
             Which field to read (determines file name).
@@ -246,12 +246,6 @@ class DataModelInterface:
         band_index: int = 0,
         set_negative_to_zero: bool = True,
         theory_uses_spherical_k: bool = False,
-        theory_model = None,
-        sys_model = None,
-        kpar_bins_theory = None,
-        kperp_bins_theory = None,
-        kperp_widths_theory = None,
-        kpar_widths_theory = None,
         **kwargs
     ) -> DataModelInterface:
         r"""Extract parameters from UVPSpec object.
@@ -264,7 +258,7 @@ class DataModelInterface:
 
         band_index
             Which band (0-indexed) to read, if the file contains multiple
-            bands. Default: 0
+            bands.
 
         set_negative_to_zero
             Whether to treat negative power spectrum measurements as 0.
@@ -352,12 +346,7 @@ class DataModelInterface:
             power_spectrum = power_spectrum*un.mK**2,
             covariance = covariance*un.mK**4,
             window_function = window_function,
-            theory_model = theory_model,
-            sys_model = sys_model,
-            kpar_bins_theory = kpar_bins_theory,
-            kperp_bins_theory = kperp_bins_theory,
-            kperp_widths_theory = kperp_widths_theory,
-            kpar_widths_theory = kpar_widths_theory)
+            **kwargs)
 
     def _kconvert(self, k):
         return k.to_value(
