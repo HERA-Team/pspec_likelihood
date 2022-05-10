@@ -1,5 +1,7 @@
 name: Test and Deploy
 
+on: [pull_request, push]
+
 jobs:
   tests:
     env:
@@ -7,7 +9,6 @@ jobs:
       PYTHON: ${{ matrix.python-version }}
       OS: ${{ matrix.os }}
     name: Testing
-    #    needs: [linter]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
