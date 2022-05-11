@@ -12,8 +12,8 @@ import numpy as np
 from cached_property import cached_property
 from scipy.integrate import quad
 from scipy.linalg import block_diag
-from scipy.stats import multivariate_normal
 from scipy.special import erf
+from scipy.stats import multivariate_normal
 
 from . import types as tp
 from .types import vld_unit
@@ -570,10 +570,10 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         # window function already applied here right?
         residuals = data - model
         like = 0.5 * (1 + erf(residuals / np.sqrt(2 * std**2)))
-        if zero_fill>0:
+        if zero_fill > 0:
             like[like == 0.0] = zero_fill
         return np.sum(np.log(like))
- 
+
 
 @attr.s(kw_only=True)
 class GaussianLinearSystematics(PSpecLikelihood):
