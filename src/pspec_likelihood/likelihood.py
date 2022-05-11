@@ -13,6 +13,7 @@ from cached_property import cached_property
 from scipy.integrate import quad
 from scipy.linalg import block_diag
 from scipy.stats import multivariate_normal
+from scipy.special import erf
 
 from . import types as tp
 from .types import vld_unit
@@ -555,6 +556,24 @@ class Gaussian(PSpecLikelihood):
         )
         return normal.logpdf(model)
 
+
+@attr.s(kw_only=True)
+class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
+    """The likelihood used in IDR2 analysis."""
+
+    def loglike(self, theory_params, sys_params, zero_fill=1e-50) -> float:
+        """Compute the log likelihood."""
+        model = self.model.compute_model(theory_params, sys_params)
+        data = self.model.power_spectrum
+        std = self.model.covariance.diagonal()
+        print("Warning: Assuming cov to be diagonal")
+        # window function already applied here right?
+        residuals = data - model
+        like = 0.5 * (1 + erf(residuals / np.sqrt(2 * std**2)))
+        if zero_fill>0:
+            like[like == 0.0] = zero_fill
+        return np.sum(np.log(like))
+ 
 
 @attr.s(kw_only=True)
 class GaussianLinearSystematics(PSpecLikelihood):
