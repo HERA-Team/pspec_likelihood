@@ -1,91 +1,76 @@
 """Module responsible for computing the likelihood for linear systematics."""
+from __future__ import annotations
+
 import numpy as np
 from numpy import matmul as matrix_multiply
 from numpy.linalg import det as determinant
 from numpy.linalg import inv as inverse
 
+from .likelihood import PSpecLikelihood
 
-class LikelihoodLinearSystematic:
-    """
-    Likelihood for the case of arbitrary linear systematic parameters.
+
+class LikelihoodLinearSystematic(PSpecLikelihood):
+    r"""Likelihood for the case of arbitrary linear systematic parameters.
 
     This code assumes that the systematic parameters are linear and enter the
-    likelihood through :
-    r′(θNL, θLsys) = d − 𝑚(θ_NL) − a_basis*θ_linearsys ≡ r − a_basis*θ_linearsys,
+    likelihood through:
+
+    .. math:: r′(θNL, θLsys) = d − 𝑚(θ_NL) − a_basis*θ_linearsys
+
     where d is the data vector, m(θ_NL) is the theory function and
     a_basis*θ_linearsys are the systematic parameters.
     The linear systematic parameters are then marginalized over.
     The likelihood in this code follows that of Tauscher et al. (2021).
 
-    Input parameters
-    ----------------
-    sys_params
-    This is a dictionary of the theory and systematic parameters.
-    Keys are as follows:
-
-    'non-linear': these are the input parameters for the theoretical_model.
-        These parameters are assumed to be an ndarray
-
-    'linear' : these are the linear systematics which are marginalizaed.
-        These parameters are assumed to be an ndarray
-
-     'linear_systematics_basis_function': callable function used to compute
-        the linear basis of the linear systematics.
+    Parameters
+    ----------
+    linear_systematics_basis_function
+        Callable function used to compute the linear basis of the linear systematics.
         This function must take the following parameters as input
-        linear_systematic_basis_function(theta_linear, theta_non_linear,
-        model.kperp_bins_theory)
-        The output of this function is required to be an ndarray of
-        shape sys_params['linear'].shape
-
-    'covariance' : a covariance matrix, 𝚺 of shape sys_params['linear'].shape,
-        that encodes the Gaussian thermal-noise on each of
-        the power spectrum measurements
-
-     'improper_uniform' : bool. If true, the prior on the linear systematic priors
-        is taking to be improper uniform. If False, the prior on the linear
-        systematic parameters is assumed to be Gaussian. In this case an
-        additional covariance and mean, which characterize the Gaussian prior
-        on theta_linear are required to be supplied in order to marginalize
-        over the Gaussian prior.
-
-     data : the dataset that we are using in the inference. This is an
-     array of shape
-
-     tolerance : limit to which we are willing to tolerate negative eigenvalues
-     of a covariance matrix. Default 1e-8. Negative eigenvalues of the covariance
-     matrix lead to non-finite values of the likelihood
-
-     sigma_theta : the covariance of the linear systematic parameters in the case
-        of a Gaussian prior on the linear systematic parameters. Must be an array of
-        shape len(linear systematics) X len(linear_systematics). Defaults to None.
+        ``linear_systematic_basis_function(theta_lin, theta_nonlin, kperp_bins_theory)``
+        The output of this function is required to be an ndarray of shape
+        ``sys_params['linear'].shape``.
+    covariance
+        A covariance matrix, 𝚺 of shape ``sys_params['linear'].shape``, encoding the
+        Gaussian thermal-noise on each of the power spectrum measurements
+    improper_uniform
+        If true, the prior on the linear systematic priors is taking to be improper
+        uniform. If False, the prior on the linear systematic parameters is assumed to
+        be Gaussian. In this case an additional covariance and mean, which characterize
+        the Gaussian prior on theta_linear are required to be supplied in order to
+        marginalize over the Gaussian prior.
+    data
+        The dataset that we are using in the inference. This is an array of shape
+    tolerance
+        Limit to which we are willing to tolerate negative eigenvalues of a covariance
+        matrix. Negative eigenvalues of the covariance matrix lead to non-finite values
+        of the likelihood
+    sigma_theta
+        The covariance of the linear systematic parameters in the case of a Gaussian
+        prior on the linear systematic parameters. Must be an array of shape
+        ``len(linear systematics) X len(linear_systematics)``.
         If None, the prior on the linear systematics is assumed to improper uniform.
-
-     mu_theta : the mean of the Gaussian prior on the linear systematic variables.
+    mu_theta
+        The mean of the Gaussian prior on the linear systematic variables.
         Must be a 1D array of length len(linear_systematics). Defaults to None.
         If None, the prior on the linear systematics are assumed to be improper uniform.
-
-     Returns
-     -------
-     likelihood: (float)
 
     """
 
     def __init__(
         self,
-        data,
-        linear_systematics_basis_function=linear_systematics_basis_function,
-        covariance=covariance,
-        mu_theta=None,
-        sigma_theta=None,
-        tolerance=1e-8,
-        model=data_model,
+        linear_systematics_basis_function,
+        mu_theta: np.ndarray | None = None,
+        sigma_theta: np.ndarray | None = None,
+        tolerance: float = 1e-8,
+        **kwargs,
     ):
+        # Run the PSpecLikelihood __init__
+        super().__init__(**kwargs)
+
         def cov_check(cov, tol=tolerance):
             lambdas = np.linalg.eigvalsh(cov)
             return np.all(lambdas > -tol)
-
-        # make the DataModelInterface object an explicit object of this class
-        self.model = model
 
         # data vector
         self.data_vector = self.model.data
@@ -100,7 +85,7 @@ class LikelihoodLinearSystematic:
         self.kperp_bins = self.model.kperp_bins_theory
 
         # function used to compute the linear systematics
-        self.linear_systematic_basis_function = linear_systematic_basis_function
+        self.linear_systematic_basis_function = linear_systematics_basis_function
 
         # mean on the Gaussian prior on the linear systematic parameters
         self.mu_theta = mu_theta
@@ -112,7 +97,7 @@ class LikelihoodLinearSystematic:
         covariance matrix which encodes gaussian thermal
         noise of power spectrum measurements
         """
-        self.sigma = covariance
+        self.sigma = self.model.covariance
 
         """ Check whether the covariance is semi positive definite."""
         if not cov_check(self.sigma):
@@ -158,6 +143,36 @@ class LikelihoodLinearSystematic:
 
             self.sigma_theta_inv = inverse(self.sigma_theta)
 
+    def compute_sigma_linear(self, basis):
+        """Computes sigma_linear given a basis."""
+        sigma_linear = inverse(
+            self.sigma_theta_inv
+            + matrix_multiply(basis.T, matrix_multiply(self.sigma_inv, basis))
+        )
+        return sigma_linear
+
+    def compute_mu_linear(self, basis, sigma_linear, r):
+        """Computes mu_linear given a basis and sigma_linear."""
+        coefficient = matrix_multiply(
+            self.sigma_theta_inv, self.mu_theta
+        ) + matrix_multiply(basis.T, matrix_multiply(self.sigma_inv, r))
+        return matrix_multiply(sigma_linear, coefficient)
+
+    def compute_h(self, r, basis):
+        """
+        Little h.
+
+        Computes little h from Tauscher et al (2021).
+        No relation to cosmic little h.
+        """
+        return matrix_multiply(self.sigma_theta_inv, self.mu_theta) + matrix_multiply(
+            basis.T, matrix_multiply(self.sigma_inv, r)
+        )
+
+    def compute_b(self, h):
+        """Computes little b from Tauscher et al (2021)."""
+        return -matrix_multiply(h.T, matrix_multiply(self.sigma_linear, h))
+
     def loglike(self, theory_params, sys_params):
         """
         Linear systematic parameters.
@@ -197,36 +212,6 @@ class LikelihoodLinearSystematic:
         Details on this derivation can be found in
         Tauscher et al (2021).
         """
-
-        def compute_sigma_linear(self, basis):
-            """Computes sigma_linear given a basis."""
-            sigma_linear = inverse(
-                self.sigma_theta_inv
-                + matrix_multiply(basis.T, matrix_multiply(self.sigma_inv, basis))
-            )
-            return sigma_linear
-
-        def compute_mu_linear(self, basis, sigma_linear, r):
-            """Computes mu_linear given a basis and sigma_linear."""
-            coefficient = matrix_multiply(
-                self.sigma_theta_inv, self.mu_theta
-            ) + matrix_multiply(basis.T, matrix_multiply(self.sigma_inv, r))
-            return matrix_multiply(sigma_linear, coefficient)
-
-        def compute_h(self, r, basis):
-            """
-            Little h.
-
-            Computes little h from Tauscher et al (2021).
-            No relation to cosmic little h.
-            """
-            return matrix_multiply(
-                self.sigma_theta_inv, self.mu_theta
-            ) + matrix_multiply(basis.T, matrix_multiply(self.sigma_inv, r))
-
-        def compute_b(self, h):
-            """Computes little b from Tauscher et al (2021)."""
-            return -matrix_multiply(h.T, matrix_multiply(self.sigma_linear, h))
 
         # compute the values of sigma_linear for this basis
         sigma_linear = self.compute_sigma_linear(a_basis)
