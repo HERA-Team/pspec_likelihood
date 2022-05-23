@@ -10,12 +10,12 @@ from pyuvdata import UVData
 from pspec_likelihood import DataModelInterface
 from pspec_likelihood import MarginalizedLinearPositiveSystematics
 
-def dummy_theory_model(z, k):
-    return 1 * un.mK**2
+def dummy_theory_model(z, k, params):
+    return params[0] * k**params[1] * un.mK**2
 
 
-def dummy_sys_model(z, k):
-    return 1 * un.mK**2
+def dummy_sys_model(z, k, params):
+    return 0 * un.mK**2
 
 
 def test_like():
@@ -32,9 +32,10 @@ def test_like():
         kpar_bins_theory=np.linspace(0.1,1,40)/un.Mpc,
         kperp_bins_theory=None,
         kpar_widths_theory=1e-2*np.ones(40)/un.Mpc,
-        kperp_widths_theory=1e-2*np.ones(40)/un.Mpc
+        kperp_widths_theory=None,
     )
     MLPS = MarginalizedLinearPositiveSystematics(model=dmi1)
-    MLPS.loglike([],[])
+    result = MLPS.loglike([0,-0.1],[])
+    assert np.allclose(result, -16.59249944, rtol=0, atol=1e-6), ("Wrong test IDR2 likelihood result", result)
     return MLPS
 
