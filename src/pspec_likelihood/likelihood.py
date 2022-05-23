@@ -167,8 +167,8 @@ class DataModelInterface:
     def _wir_vld(self, att, val):
         if (
             val != "midpoint"
-            and self.kpar_widths_theory is None
-            or self.kperp_widths_theory is None
+            and self.kperp_widths_theory is None
+            or self.kpar_widths_theory is None
         ):
             raise ValueError(
                 f"if window_integration_rule={val}, kpar/kperp widths are required."
