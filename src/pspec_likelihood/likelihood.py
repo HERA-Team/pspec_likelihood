@@ -420,7 +420,9 @@ class DataModelInterface:
         if self.theory_uses_spherical_k:
             k = self._kconvert(self.spherical_kbins_theory)
             if self.window_integration_rule != "midpoint":
-                kwidth = self._kconvert(self.spherical_kbins_width_theory)
+                kwidth = self._kconvert(self.kpar_widths_theory)
+            else:
+                kwidth = 0 # not required in _discretize() with midpoint rule
 
         else:
             k = (
