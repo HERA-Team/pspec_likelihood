@@ -422,7 +422,7 @@ class DataModelInterface:
             if self.window_integration_rule != "midpoint":
                 kwidth = self._kconvert(self.kpar_widths_theory)
             else:
-                kwidth = 0 # not required in _discretize() with midpoint rule
+                kwidth = 0  # not required in _discretize() with midpoint rule
 
         else:
             k = (
@@ -443,7 +443,7 @@ class DataModelInterface:
         each cylindrical k-bin. The way in which this is done is controlled by
         :attr:`window_integration_rule`.
         """
-        if self.apply_window_to_systematics: #todo is this right?
+        if self.apply_window_to_systematics:  # todo is this right?
             if self.theory_uses_spherical_k:
                 k = self._kconvert(self.kpar_bins_theory)
             else:
@@ -578,7 +578,7 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         print("Warning: Ignoring data in positions", mask, "as the variance is zero.")
         residuals_over_errors = (residuals / np.sqrt(2 * var))[mask].to(un.one)
         like = 0.5 * (1 + erf(residuals_over_errors))
-        if zero_fill>0:
+        if zero_fill > 0:
             like[like == 0.0] = zero_fill
         return np.sum(np.log(like))
 
@@ -592,7 +592,7 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         print("Warning: Ignoring data in positions", mask, "as the variance is zero.")
         residuals_over_errors = (residuals / np.sqrt(2 * var))[mask].to(un.one)
         like = 0.5 * (1 + erf(residuals_over_errors))
-        if zero_fill>0:
+        if zero_fill > 0:
             like[like == 0.0] = zero_fill
         return np.sum(np.log(like))
 
