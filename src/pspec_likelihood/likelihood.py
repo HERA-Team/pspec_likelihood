@@ -571,11 +571,31 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         """Compute the log likelihood."""
         model = self.model.compute_model(theory_params, sys_params)
         data = self.model.power_spectrum
-        std = self.model.covariance.diagonal()
-        print("Warning: Assuming cov to be diagonal")
-        # window function already applied here right?
         residuals = data - model
-        like = 0.5 * (1 + erf(residuals / np.sqrt(2 * std**2)))
+        var = self.model.covariance.diagonal()
+        print("Warning: Assuming covariance to be diagonal")
+        mask = np.where(var != 0 * un.mK**4)
+        print("Warning: Ignoring data in positions", mask, "as the variance is zero.")
+        residuals_over_errors = (residuals / np.sqrt(2 * var))[mask].to(un.one)
+        print("residuals_over_errors", residuals_over_errors)
+        like = 0.5 * (1 + erf(residuals_over_errors))
+        print("like", like)
+        if zero_fill>0:
+            like[like == 0.0] = zero_fill
+        return np.sum(np.log(like))
+
+    def baseline_loglike(self, zero_fill=1e-50) -> float:
+        """Maximum likelihood value (i.e. data = 0)"""
+        data = self.model.power_spectrum
+        residuals = data
+        var = self.model.covariance.diagonal()
+        print("Warning: Assuming covariance to be diagonal")
+        mask = np.where(var != 0 * un.mK**4)
+        print("Warning: Ignoring data in positions", mask, "as the variance is zero.")
+        residuals_over_errors = (residuals / np.sqrt(2 * var))[mask].to(un.one)
+        print("residuals_over_errors", residuals_over_errors)
+        like = 0.5 * (1 + erf(residuals_over_errors))
+        print("like", like)
         if zero_fill>0:
             like[like == 0.0] = zero_fill
         return np.sum(np.log(like))
