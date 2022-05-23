@@ -443,19 +443,23 @@ class DataModelInterface:
         each cylindrical k-bin. The way in which this is done is controlled by
         :attr:`window_integration_rule`.
         """
-        if self.apply_window_to_systematics:
-            k = (
-                self._kconvert(self.kperp_bins_theory),
-                self._kconvert(self.kpar_bins_theory),
-            )
+        if self.apply_window_to_systematics: #todo is this right?
+            if self.theory_uses_spherical_k:
+                k = self._kconvert(self.kpar_bins_theory)
+            else:
+                k = (
+                    self._kconvert(self.kperp_bins_theory),
+                    self._kconvert(self.kpar_bins_theory),
+                )
         else:
             k = (
                 self._kconvert(self.kperp_bins_obs),
                 self._kconvert(self.kpar_bins_obs),
             )
+        kwidth = 0  # TODO: need to do this correctly.
 
         sys_params = self._validate_params(sys_params, self.sys_param_names)
-        return self._discretize(self.sys_model, z, k, sys_params)
+        return self._discretize(self.sys_model, z, k, kwidth, sys_params)
 
     def apply_window_function(self, discretized_model: tp.PowerType) -> tp.PowerType:
         r"""Calculate theoretical power spectrum with data window function applied.
