@@ -574,8 +574,12 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         residuals = data - model
         var = self.model.covariance.diagonal()
         print("Warning: Assuming covariance to be diagonal")
-        mask = (var != 0 * un.mK**4)
-        print("Warning: Ignoring data in positions", np.where(np.logical_not(mask)), "as the variance is zero.")
+        mask = var != 0 * un.mK**4
+        print(
+            "Warning: Ignoring data in positions",
+            np.where(np.logical_not(mask)),
+            "as the variance is zero.",
+        )
         residuals_over_errors = (residuals / np.sqrt(2 * var))[mask].to(un.one)
         like = 0.5 * (1 + erf(residuals_over_errors))
         if zero_fill > 0:
@@ -588,8 +592,12 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         residuals = data
         var = self.model.covariance.diagonal()
         print("Warning: Assuming covariance to be diagonal")
-        mask = (var != 0 * un.mK**4)
-        print("Warning: Ignoring data in positions", np.where(np.logical_not(mask)), "as the variance is zero.")
+        mask = var != 0 * un.mK**4
+        print(
+            "Warning: Ignoring data in positions",
+            np.where(np.logical_not(mask)),
+            "as the variance is zero.",
+        )
         residuals_over_errors = (residuals / np.sqrt(2 * var))[mask].to(un.one)
         like = 0.5 * (1 + erf(residuals_over_errors))
         if zero_fill > 0:
