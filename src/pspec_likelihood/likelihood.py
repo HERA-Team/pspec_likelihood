@@ -12,8 +12,8 @@ import numpy as np
 from cached_property import cached_property
 from scipy.integrate import quad
 from scipy.linalg import block_diag
-from scipy.stats import multivariate_normal
 from scipy.special import erf
+from scipy.stats import multivariate_normal
 
 from . import types as tp
 from .types import vld_unit
@@ -577,9 +577,7 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         mask = np.where(var != 0 * un.mK**4)
         print("Warning: Ignoring data in positions", mask, "as the variance is zero.")
         residuals_over_errors = (residuals / np.sqrt(2 * var))[mask].to(un.one)
-        print("residuals_over_errors", residuals_over_errors)
         like = 0.5 * (1 + erf(residuals_over_errors))
-        print("like", like)
         if zero_fill>0:
             like[like == 0.0] = zero_fill
         return np.sum(np.log(like))
@@ -593,13 +591,11 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         mask = np.where(var != 0 * un.mK**4)
         print("Warning: Ignoring data in positions", mask, "as the variance is zero.")
         residuals_over_errors = (residuals / np.sqrt(2 * var))[mask].to(un.one)
-        print("residuals_over_errors", residuals_over_errors)
         like = 0.5 * (1 + erf(residuals_over_errors))
-        print("like", like)
         if zero_fill>0:
             like[like == 0.0] = zero_fill
         return np.sum(np.log(like))
- 
+
 
 @attr.s(kw_only=True)
 class GaussianLinearSystematics(PSpecLikelihood):
