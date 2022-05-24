@@ -580,7 +580,7 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
             np.where(np.logical_not(mask)),
             "as the variance is zero.",
         )
-        residuals_over_errors = (residuals / np.sqrt(2 * var))[mask].to(un.one)
+        residuals_over_errors = (residuals[mask] / np.sqrt(2 * var[mask])).to(un.one)
         like = 0.5 * (1 + erf(residuals_over_errors))
         if zero_fill > 0:
             like[like == 0.0] = zero_fill
