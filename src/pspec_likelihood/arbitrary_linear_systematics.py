@@ -1,16 +1,19 @@
 """Module responsible for computing the likelihood for linear systematics."""
 from __future__ import annotations
 
+import attr
 import numpy as np
+from cached_property import cached_property
 from numpy import matmul as matrix_multiply
-from numpy.linalg import det as determinant
 from numpy.linalg import inv as inverse
+from scipy import stats
 
 from .likelihood import PSpecLikelihood
 
 
+@attr.s
 class LikelihoodLinearSystematic(PSpecLikelihood):
-    r"""Likelihood for the case of arbitrary linear systematic parameters.
+    """Likelihood for the case of arbitrary linear systematic parameters.
 
     This code assumes that the systematic parameters are linear and enter the
     likelihood through:
@@ -30,21 +33,6 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
         ``linear_systematic_basis_function(theta_lin, theta_nonlin, kperp_bins_theory)``
         The output of this function is required to be an ndarray of shape
         ``sys_params['linear'].shape``.
-    covariance
-        A covariance matrix, 𝚺 of shape ``sys_params['linear'].shape``, encoding the
-        Gaussian thermal-noise on each of the power spectrum measurements
-    improper_uniform
-        If true, the prior on the linear systematic priors is taking to be improper
-        uniform. If False, the prior on the linear systematic parameters is assumed to
-        be Gaussian. In this case an additional covariance and mean, which characterize
-        the Gaussian prior on theta_linear are required to be supplied in order to
-        marginalize over the Gaussian prior.
-    data
-        The dataset that we are using in the inference. This is an array of shape
-    tolerance
-        Limit to which we are willing to tolerate negative eigenvalues of a covariance
-        matrix. Negative eigenvalues of the covariance matrix lead to non-finite values
-        of the likelihood
     sigma_theta
         The covariance of the linear systematic parameters in the case of a Gaussian
         prior on the linear systematic parameters. Must be an array of shape
@@ -57,121 +45,66 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
 
     """
 
-    def __init__(
-        self,
-        linear_systematics_basis_function,
-        mu_theta: np.ndarray | None = None,
-        sigma_theta: np.ndarray | None = None,
-        tolerance: float = 1e-8,
-        **kwargs,
-    ):
-        # Run the PSpecLikelihood __init__
-        super().__init__(**kwargs)
+    linear_systematics_basis_function = attr.ib()
+    mu_theta: np.ndarray | None = attr.ib(None)
+    nlinear: int = attr.ib()
+    sigma_theta: np.ndarray = attr.ib()
 
-        def cov_check(cov, tol=tolerance):
-            lambdas = np.linalg.eigvalsh(cov)
-            return np.all(lambdas > -tol)
+    @cached_property
+    def covariance_inv(self):
+        """Computes inverse of covariance."""
+        return inverse(self.model.covariance)
 
-        # data vector
-        self.data_vector = self.model.data
+    @cached_property
+    def is_improper_uniform(self) -> bool:
+        """Checks for improper uniform priors."""
+        return self.mu_theta is None
 
-        # model to compute the theory function
-        self.compute_theory_model = self.model.compute_model
+    @nlinear.default
+    def _nlinear(self) -> int:
+        if self.is_improper_uniform:
+            raise ValueError("You need to provide nlinear if mu_theta is not provided")
+        return len(self.mu_theta)
 
-        """
-        The kperp bins from data model interface.
-        Used to comptue the linear basis function
-        """
-        self.kperp_bins = self.model.kperp_bins_theory
-
-        # function used to compute the linear systematics
-        self.linear_systematic_basis_function = linear_systematics_basis_function
-
-        # mean on the Gaussian prior on the linear systematic parameters
-        self.mu_theta = mu_theta
-
-        # covariance of the Gaussian prior on the linear systematic parameters
-        self.sigma_theta = sigma_theta
-
-        """
-        covariance matrix which encodes gaussian thermal
-        noise of power spectrum measurements
-        """
-        self.sigma = self.model.covariance
-
-        """ Check whether the covariance is semi positive definite."""
-        if not cov_check(self.sigma):
-            raise Exception("covariance is not invertible")
+    @sigma_theta.default
+    def _sigma_theta_default(self) -> np.ndarray:
+        if self.is_improper_uniform:
+            return np.diag(np.ones(self.nlinear) * np.inf)
         else:
-            self.sigma_inv = inverse(self.sigma)
+            raise ValueError("Provide sigma_theta")
 
-        """
-        If the prior is improper uniform, then we don't need to specify
-        anything about the parameter space of the systematic priors.
-        """
-        if self.sigma_theta is None or self.mu_theta is None:
-            r"""
-            this is a hacky way of getting the prior on the
-            linear systematics to match the improper uniform result
-            i.e. \pi_L( \mu_L ) --> 1
-            """
-            self.sigma_theta_inv = 0
-            self.sigma_theta = np.identity(len(self.mu_theta)) * np.pi ** (
-                1 / len(self.mu_theta)
-            )
-        else:
-            """
-            The user needs to specify the mean and covariance of the Gaussian
-            which characterizes the prior of the linear systematics
-            make sure that the sigma_theta and mu_linear are
-            arrays of the correct shape.
-            """
-            if not isinstance(self.sigma_theta, np.ndarray):
-                print("theta covariance is of type ", type(self.sigma_theta))
-            if not isinstance(self.mu_theta, np.ndarray):
-                print("theta covariance is of type ", type(self.mu_theta))
+    @sigma_theta.validator
+    def _sigma_theta_validator(self, att, val):
+        if val.ndim != 2:
+            raise ValueError(f'{"Covariance must be two dimensional"}')
+        if val.shape[0] != val.shape[1]:
+            raise ValueError(f'{"Covariance must be square"}')
+        lambdas = np.linalg.eigvalsh(val)
+        if not np.all(lambdas > -self.model.cov_tolerance):
+            raise ValueError(f'{"Covariance is not invertible"}')
 
-            # The shape of mu_theta must match the covariance
-            assert (
-                len(self.mu_theta) == self.sigma_theta.shape[0]
-                and len(self.mu_linear) == self.sigma_theta.shape[1]
-            ), f'{"Dimension the systematics does not match systematic params"}'
-
-            # make sure the covariance is invertible
-            if not cov_check(self.sigma_theta):
-                raise Exception("covariance is not invertible")
-
-            self.sigma_theta_inv = inverse(self.sigma_theta)
+    @cached_property
+    def sigma_theta_inv(self) -> np.ndarray:
+        """Computes the inverse of the theta covariances."""
+        return inverse(self.sigma_theta)
 
     def compute_sigma_linear(self, basis):
         """Computes sigma_linear given a basis."""
-        sigma_linear = inverse(
-            self.sigma_theta_inv
-            + matrix_multiply(basis.T, matrix_multiply(self.sigma_inv, basis))
+        a_sigma_a = matrix_multiply(
+            basis.T, matrix_multiply(self.model.covariance_inv, basis)
         )
-        return sigma_linear
+
+        return inverse(self.sigma_theta_inv + a_sigma_a)
 
     def compute_mu_linear(self, basis, sigma_linear, r):
         """Computes mu_linear given a basis and sigma_linear."""
-        coefficient = matrix_multiply(
-            self.sigma_theta_inv, self.mu_theta
-        ) + matrix_multiply(basis.T, matrix_multiply(self.sigma_inv, r))
-        return matrix_multiply(sigma_linear, coefficient)
-
-    def compute_h(self, r, basis):
-        """
-        Little h.
-
-        Computes little h from Tauscher et al (2021).
-        No relation to cosmic little h.
-        """
-        return matrix_multiply(self.sigma_theta_inv, self.mu_theta) + matrix_multiply(
-            basis.T, matrix_multiply(self.sigma_inv, r)
+        a_sigma_r = +matrix_multiply(
+            basis.T, matrix_multiply(self.model.covariance_inv, r)
         )
+        if not self.is_improper_uniform:
+            a_sigma_r += matrix_multiply(self.sigma_theta_inv, self.mu_theta)
 
-    def compute_b(self, h):
-        """Computes little b from Tauscher et al (2021)."""
-        return -matrix_multiply(h.T, matrix_multiply(self.sigma_linear, h))
+        return matrix_multiply(sigma_linear, a_sigma_r)
 
     def loglike(self, theory_params, sys_params):
         """
@@ -180,38 +113,25 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
         Right now the systematic variables are ASSUMED to
         be in the same basis as the k_bins.
         """
-        theta_linear = sys_params["linear"]
-
-        # non-linear systematic parameters
-        theta_nl = sys_params["non_linear"]
-
         # this is the linear systematic coefficients - compute at each step
         a_basis = self.linear_systematic_basis_function(
-            theta_linear, theta_nl, self.kperp_bins
+            sys_params, self.model.kperp_bins_obs, self.model.kpar_bins_obs
         )
 
         # optionally apply window function to the linear systematics matrix here
-
-        # compute the theoretical model for this set of parameters
-        theory_model = self.compute_theory_model(theta_nl, theta_linear, a_basis)
-
-        # The shape of a_basis must match the k bins
-        assert a_basis.shape[0] == len(theta_nl) and self.a_basis.shape[1] == len(
-            theta_nl
-        ), f'{"Dimensionality of systematics does not match systematic params"}'
-
-        # make sure the covariance is of the same shape as the linear systematics
-        assert (
-            a_basis.shape == self.sigma.shape
-        ), f'{"Dimensionality of the systematics does not match covariance"}'
-
-        r = self.data_vector - theory_model
-        rprime = r - np.matmul(a_basis, theta_linear)
 
         """
         Details on this derivation can be found in
         Tauscher et al (2021).
         """
+
+        # compute the theoretical model for this set of parameters
+        theory_model = self.model.compute_model(theory_params, sys_params)
+
+        # The shape of a_basis must match the k bins
+        assert a_basis.shape == (len(self.model.kpar_bins_obs), self.nlinear)
+
+        r = self.model.data - theory_model
 
         # compute the values of sigma_linear for this basis
         sigma_linear = self.compute_sigma_linear(a_basis)
@@ -219,29 +139,24 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
         # compute the values of mu_linear for this basis and sigma_linear
         mu_linear = self.compute_mu_linear(a_basis, sigma_linear, r)
 
-        """
-        computing b and h in Tauscher et al is not used in this implementation
-        b = self.compute_b(h)
-        h = self.compute_h(r, a_basis)
-        """
+        rprime = r - np.matmul(a_basis, mu_linear)
 
-        """ the effective likelihood (i.e. the likelihood
-        marginalized over the linear systematic parameters) is
-        the product of the prior which depends only on the
-        linear systematics and a likelihood
-        which takes into account the non-linearity"""
+        if not self.is_improper_uniform:
+            # evaluate outside make cached property
+            prior_mn = stats.multivariate_normal(
+                mean=self.mu_theta, cov=self.sigma_theta
+            )
+            prior = np.sum(prior_mn.logpdf(mu_linear))
 
-        r_prior = mu_linear - self.mu_theta
+        else:
+            prior = 0
+        # evaluate outside
+        loglikelihood_nl = stats.multivariate_normal(cov=self.model.covariance)
+        loglikelihood = np.sum(loglikelihood_nl.logpdf(rprime))
 
-        prior = np.pi * determinant(self.sigma_theta) - 0.5 * matrix_multiply(
-            r_prior.T, matrix_multiply(self.sigma_theta_inv, r_prior)
+        loglikelihood_eff = (
+            0.5 * np.linalg.slogdet(sigma_linear)[1] + prior + loglikelihood
         )
-
-        loglikelihood_nl = np.pi * determinant(self.sigma) - 0.5 * matrix_multiply(
-            rprime.T, matrix_multiply(self.sigma_inv, rprime)
-        )
-
-        loglikelihood_eff = np.pi * sigma_linear + prior + loglikelihood_nl
 
         if np.isfinite(loglikelihood_eff) is False:
             print("Warning: Non definite likelihood")
