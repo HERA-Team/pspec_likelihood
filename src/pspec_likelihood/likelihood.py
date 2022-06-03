@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Callable, Literal, Sequence
+from wsgiref.validate import validator
 
 import astropy.cosmology as csm
 import astropy.units as un
@@ -43,6 +44,10 @@ class DataModelInterface:
         array whose first dimension has length equal to the power spectrum, and the
         second dimension has the same length as
         ``kpar_bins_theory``/``kperp_bins_theory``.
+    cov_tolerance
+        Limit to which we are willing to tolerate negative eigenvalues of a covariance
+        matrix. Negative eigenvalues of the covariance matrix lead to non-finite values
+        of the likelihood
     covariance
         The data covariance matrix. If 2D, must be a square matrix with each dimension
         the same length as ``power_spectrum``. If 1D, the covariance is assumed to be
@@ -109,6 +114,7 @@ class DataModelInterface:
         validator=vld_unit(un.mK**2), eq=tp.cmp_array
     )
     window_function: np.ndarray = attr.ib(eq=tp.cmp_array, converter=np.array)
+    cov_tolerance: float = attr.ib(1e-8, validator=attr.validators.gt(0))
     covariance: tp.CovarianceType = attr.ib(validator=vld_unit(un.mK**4))
     theory_model: Callable = attr.ib(validator=attr.validators.is_callable())
     sys_model: Callable = attr.ib(validator=attr.validators.is_callable())
@@ -137,6 +143,16 @@ class DataModelInterface:
         None, converter=attr.converters.optional(tuple)
     )
     apply_window_to_systematics: bool = attr.ib(True, converter=bool)
+
+    @covariance.validator
+    def _cov_validator(self, att, val):
+        if val.ndim != 2:
+            raise ValueError(f'{"Covariance must be two dimensional"}')
+        if val.shape[0] != val.shape[1]:
+            raise ValueError(f'{"Covariance must be square"}')
+        lambdas = np.linalg.eigvalsh(val)
+        if not np.all(lambdas > -self.cov_tolerance):
+            raise ValueError(f'{"Covariance is not invertible"}')
 
     @kpar_bins_obs.validator
     @kpar_bins_theory.validator
