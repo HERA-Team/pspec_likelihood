@@ -88,6 +88,16 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
         """Computes the inverse of the theta covariances."""
         return inverse(self.sigma_theta)
 
+    @cached_property
+    def compute_mn_prior(self):
+        """Computes the multivariate normal prior."""
+        return stats.multivariate_normal(mean=self.mu_theta, cov=self.sigma_theta)
+
+    @cached_property
+    def compute_mn_loglike(self):
+        """Computes the multivariate normal for loglike."""
+        return stats.multivariate_normal(cov=self.model.covariance)
+
     def compute_sigma_linear(self, basis):
         """Computes sigma_linear given a basis."""
         a_sigma_a = matrix_multiply(
@@ -142,17 +152,11 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
         rprime = r - np.matmul(a_basis, mu_linear)
 
         if not self.is_improper_uniform:
-            # evaluate outside make cached property
-            prior_mn = stats.multivariate_normal(
-                mean=self.mu_theta, cov=self.sigma_theta
-            )
-            prior = np.sum(prior_mn.logpdf(mu_linear))
-
+            prior = np.sum(self.compute_mn_prior.logpdf(mu_linear))
         else:
             prior = 0
-        # evaluate outside
-        loglikelihood_nl = stats.multivariate_normal(cov=self.model.covariance)
-        loglikelihood = np.sum(loglikelihood_nl.logpdf(rprime))
+
+        loglikelihood = np.sum(self.compute_mn_loglike.logpdf(rprime))
 
         loglikelihood_eff = (
             0.5 * np.linalg.slogdet(sigma_linear)[1] + prior + loglikelihood
