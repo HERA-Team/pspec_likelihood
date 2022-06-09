@@ -199,6 +199,14 @@ class DataModelInterface:
             return self.kpar_bins_theory
 
     @cached_property
+    def spherical_width_theory(self) -> tp.Wavenumber:
+        """The spherical k bins of the theory (edges)."""
+        if self.kperp_bins_theory is not None:
+            raise NotImplementedError
+        else:
+            return self.kpar_widths_theory
+
+    @cached_property
     def kperp_centres(self) -> tp.Wavenumber:
         """Centres of the kperp bins."""
         return (self.kperp_bins_obs[1:] + self.kperp_bins_obs[:-1]) / 2
@@ -420,7 +428,7 @@ class DataModelInterface:
         if self.theory_uses_spherical_k:
             k = self._kconvert(self.spherical_kbins_theory)
             if self.window_integration_rule != "midpoint":
-                kwidth = self._kconvert(self.kpar_widths_theory)
+                kwidth = self._kconvert(self.spherical_width_theory)
             else:
                 kwidth = 0  # not required in _discretize() with midpoint rule
 
