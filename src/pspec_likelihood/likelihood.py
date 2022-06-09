@@ -113,7 +113,9 @@ class DataModelInterface:
     window_function: np.ndarray = attr.ib(eq=tp.cmp_array, converter=np.array)
     covariance: tp.CovarianceType = attr.ib(validator=vld_unit(un.mK**4))
     theory_model: Callable = attr.ib(validator=attr.validators.is_callable())
-    sys_model: Callable = attr.ib(validator=attr.validators.is_callable())
+    sys_model: Callable | None = attr.ib(
+        validator=attr.validators.optional(attr.validators.is_callable())
+    )
 
     cosmology: csm.FLRW = attr.ib(
         csm.Planck18, validator=attr.validators.instance_of(csm.FLRW)
@@ -452,6 +454,9 @@ class DataModelInterface:
         each cylindrical k-bin. The way in which this is done is controlled by
         :attr:`window_integration_rule`.
         """
+        if self.sys_model is None:
+            return 0, 0
+
         if self.apply_window_to_systematics:  # todo is this right?
             if self.theory_uses_spherical_k:
                 k = self._kconvert(self.spherical_kbins_theory)
@@ -553,9 +558,21 @@ class PSpecLikelihood(ABC):
 
     model: DataModelInterface = attr.ib()
 
+    def __attrs_post_init__(self):
+        """Do stuff after initialization."""
+        self.validate()
+
     @abstractmethod
     def loglike(self, theory_params, sys_params) -> float:
         """Compute the log-likelihood."""
+        pass
+
+    def validate(self):
+        """Validation of a particular likelihood.
+
+        In particular, this is useful for ensuring that the data model follows certain
+        rules that might be particular to the likelihood (eg. diagonal covariance).
+        """
         pass
 
 
@@ -572,6 +589,16 @@ class Gaussian(PSpecLikelihood):
         return normal.logpdf(model)
 
 
+def logerf_at_largex(x, n=10):
+    """Compute a stable log of 1 - erf(x) at large x."""
+    nn = np.arange(n)
+    double_fac = np.cumprod(2 * nn - 1)
+    print(double_fac / 2**n)
+    sumpart = (-1) ** (nn + 1) * double_fac / 2**nn / x ** (nn + 1)
+    print(sumpart, np.sum(sumpart))
+    return -(x**2) - 0.5 * np.log(np.pi) + np.log(np.sum(sumpart))
+
+
 @attr.s(kw_only=True)
 class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
     """The likelihood used in IDR2 analysis.
@@ -586,23 +613,57 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
 
     zero_fill: float = attr.ib(default=-100)
 
+    def validate(self):
+        """Ensure the model has diagonal covariance and no systematics model."""
+        if not np.all(
+            np.isclose(
+                self.model.covariance - np.diag(np.diag(self.model.covariance)), 0
+            )
+        ):
+            warnings.warn(
+                f"Your covariance matrix is not diagonal. The {self.__class__.__name__}"
+                " class requires diagonal covariance. Forcing it..."
+            )
+
+        if self.model.sys_model is not None:
+            raise ValueError(
+                f"sys_model must be None for the {self.__class__.__name__} class."
+            )
+
+    @cached_property
+    def variance(self):
+        """The diagonal of the covariance matrix."""
+        return np.diag(self.model.covariance)
+
+    @cached_property
+    def data_mask(self):
+        """A mask where data is properly defined and usable."""
+        mask = self.variance != 0 * un.mK**4
+        if np.any(~mask):
+            warnings.warn(
+                f"Warning: Ignoring data in positions {np.where(~mask)} "
+                "as the variance is zero"
+            )
+        return mask
+
     def loglike(self, theory_params, sys_params) -> float:
         """Compute the log likelihood."""
-        model = self.model.compute_model(theory_params, sys_params)
-        data = self.model.power_spectrum
+        assert not sys_params
+
+        model = self.model.compute_model(theory_params, sys_params)[self.data_mask]
+        data = self.model.power_spectrum[self.data_mask]
         residuals = data - model
-        var = self.model.covariance.diagonal()
-        warnings.warn("Warning: Assuming covariance to be diagonal")
-        mask = var != 0 * un.mK**4
-        warnings.warn(
-            "Warning: Ignoring data in positions"
-            + str(np.where(np.logical_not(mask)))
-            + "as the variance is zero.",
-        )
-        residuals_over_errors = (residuals[mask] / np.sqrt(2 * var[mask])).to(un.one)
-        loglike = np.log(0.5) + np.log1p(erf(residuals_over_errors))
+
+        residuals_over_errors = (
+            residuals / np.sqrt(2 * self.variance[self.data_mask])
+        ).value
+
+        log1perf = np.log1p(erf(residuals_over_errors))
+
+        loglike = np.log(0.5) + log1perf
         if self.zero_fill > 0:
             loglike[np.isinf(loglike)] = self.zero_fill
+
         return np.sum(loglike)
 
 
