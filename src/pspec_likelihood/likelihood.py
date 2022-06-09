@@ -1,6 +1,7 @@
 """Primary module defining likelihoods based on HERA power spectra."""
 from __future__ import annotations
 
+import warnings
 from abc import ABC, abstractmethod
 from typing import Callable, Literal, Sequence
 
@@ -14,7 +15,6 @@ from scipy.integrate import quad
 from scipy.linalg import block_diag
 from scipy.special import erf
 from scipy.stats import multivariate_normal
-import warnings
 
 from . import types as tp
 from .types import vld_unit
