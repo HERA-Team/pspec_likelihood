@@ -573,9 +573,19 @@ class Gaussian(PSpecLikelihood):
 
 @attr.s(kw_only=True)
 class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
-    """The likelihood used in IDR2 analysis."""
+    """The likelihood used in IDR2 analysis.
 
-    def loglike(self, theory_params, sys_params, zero_fill=1e-50) -> float:
+    Parameters
+    ----------
+    zero_fill
+        Return a likelihood value of zero_fill instead of 0
+        when the likelihood is actually 0. Possibly useful
+        to avoid errors in sampling libraries used.
+    """
+
+    zero_fill: float = attr.ib(default=1e-50)
+
+    def loglike(self, theory_params, sys_params) -> float:
         """Compute the log likelihood."""
         model = self.model.compute_model(theory_params, sys_params)
         data = self.model.power_spectrum
@@ -590,11 +600,11 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         )
         residuals_over_errors = (residuals[mask] / np.sqrt(2 * var[mask])).to(un.one)
         like = 0.5 * (1 + erf(residuals_over_errors))
-        if zero_fill > 0:
-            like[like == 0.0] = zero_fill
+        if self.zero_fill > 0:
+            like[like == 0.0] = self.zero_fill
         return np.sum(np.log(like))
 
-    def baseline_loglike(self, zero_fill=1e-50) -> float:
+    def baseline_loglike(self) -> float:
         """Maximum likelihood value (i.e. data = 0)"""
         data = self.model.power_spectrum
         residuals = data
@@ -608,8 +618,8 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         )
         residuals_over_errors = (residuals / np.sqrt(2 * var))[mask].to(un.one)
         like = 0.5 * (1 + erf(residuals_over_errors))
-        if zero_fill > 0:
-            like[like == 0.0] = zero_fill
+        if self.zero_fill > 0:
+            like[like == 0.0] = self.zero_fill
         return np.sum(np.log(like))
 
 
