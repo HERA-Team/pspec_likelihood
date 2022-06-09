@@ -578,12 +578,12 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
     Parameters
     ----------
     zero_fill
-        Return a likelihood value of zero_fill instead of 0
+        Return a loglikelihood value of zero_fill instead of -inf
         when the likelihood is actually 0. Possibly useful
         to avoid errors in sampling libraries used.
     """
 
-    zero_fill: float = attr.ib(default=1e-50)
+    zero_fill: float = attr.ib(default=-100)
 
     def loglike(self, theory_params, sys_params) -> float:
         """Compute the log likelihood."""
@@ -599,28 +599,10 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
             "as the variance is zero.",
         )
         residuals_over_errors = (residuals[mask] / np.sqrt(2 * var[mask])).to(un.one)
-        like = 0.5 * (1 + erf(residuals_over_errors))
+        loglike = np.log(0.5) + np.log1p(erf(residuals_over_errors))
         if self.zero_fill > 0:
-            like[like == 0.0] = self.zero_fill
-        return np.sum(np.log(like))
-
-    def baseline_loglike(self) -> float:
-        """Maximum likelihood value (i.e. data = 0)"""
-        data = self.model.power_spectrum
-        residuals = data
-        var = self.model.covariance.diagonal()
-        print("Warning: Assuming covariance to be diagonal")
-        mask = var != 0 * un.mK**4
-        print(
-            "Warning: Ignoring data in positions",
-            np.where(np.logical_not(mask)),
-            "as the variance is zero.",
-        )
-        residuals_over_errors = (residuals / np.sqrt(2 * var))[mask].to(un.one)
-        like = 0.5 * (1 + erf(residuals_over_errors))
-        if self.zero_fill > 0:
-            like[like == 0.0] = self.zero_fill
-        return np.sum(np.log(like))
+            loglike[np.isinf(loglike)] = zero_fill
+        return np.sum(loglike)
 
 
 @attr.s(kw_only=True)
