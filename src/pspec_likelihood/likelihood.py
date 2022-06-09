@@ -14,6 +14,7 @@ from scipy.integrate import quad
 from scipy.linalg import block_diag
 from scipy.special import erf
 from scipy.stats import multivariate_normal
+import warnings
 
 from . import types as tp
 from .types import vld_unit
@@ -591,17 +592,17 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         data = self.model.power_spectrum
         residuals = data - model
         var = self.model.covariance.diagonal()
-        print("Warning: Assuming covariance to be diagonal")
+        warnings.warn("Warning: Assuming covariance to be diagonal")
         mask = var != 0 * un.mK**4
-        print(
-            "Warning: Ignoring data in positions",
-            np.where(np.logical_not(mask)),
-            "as the variance is zero.",
+        warnings.warn(
+            "Warning: Ignoring data in positions"
+            + str(np.where(np.logical_not(mask)))
+            + "as the variance is zero.",
         )
         residuals_over_errors = (residuals[mask] / np.sqrt(2 * var[mask])).to(un.one)
         loglike = np.log(0.5) + np.log1p(erf(residuals_over_errors))
         if self.zero_fill > 0:
-            loglike[np.isinf(loglike)] = zero_fill
+            loglike[np.isinf(loglike)] = self.zero_fill
         return np.sum(loglike)
 
 
