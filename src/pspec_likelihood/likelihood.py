@@ -453,7 +453,7 @@ class DataModelInterface:
         """
         if self.apply_window_to_systematics:  # todo is this right?
             if self.theory_uses_spherical_k:
-                k = self._kconvert(self.kpar_bins_theory)
+                k = self._kconvert(self.spherical_kbins_theory)
             else:
                 k = (
                     self._kconvert(self.kperp_bins_theory),
