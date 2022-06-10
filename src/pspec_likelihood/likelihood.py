@@ -589,14 +589,9 @@ class Gaussian(PSpecLikelihood):
         return normal.logpdf(model)
 
 
-def logerf_at_largex(x, n=10):
+def logerf_at_large_negative_x(x):
     """Compute a stable log of 1 - erf(x) at large x."""
-    nn = np.arange(n)
-    double_fac = np.cumprod(2 * nn - 1)
-    print(double_fac / 2**n)
-    sumpart = (-1) ** (nn + 1) * double_fac / 2**nn / x ** (nn + 1)
-    print(sumpart, np.sum(sumpart))
-    return -(x**2) - 0.5 * np.log(np.pi) + np.log(np.sum(sumpart))
+    return -(x**2) - 0.5 * np.log(np.pi) - np.log(np.abs(x))
 
 
 @attr.s(kw_only=True)
@@ -658,7 +653,11 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
             residuals / np.sqrt(2 * self.variance[self.data_mask])
         ).value
 
-        log1perf = np.log1p(erf(residuals_over_errors))
+        log1perf = np.where(
+            residuals_over_errors > -5,
+            np.log1p(erf(residuals_over_errors)),
+            logerf_at_large_negative_x(residuals_over_errors),
+        )
 
         loglike = np.log(0.5) + log1perf
         if self.zero_fill > 0:
