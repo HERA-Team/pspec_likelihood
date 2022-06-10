@@ -121,11 +121,11 @@ class DataModelInterface:
         csm.Planck18, validator=attr.validators.instance_of(csm.FLRW)
     )
     kpar_bins_obs: tp.Wavenumber = attr.ib()
-    kperp_bins_obs: tp.Wavenumber | None = attr.ib()
+    kperp_bins_obs: tp.Wavenumber | None = attr.ib(None)
     kpar_bins_theory: tp.Wavenumber = attr.ib()
-    kperp_bins_theory: tp.Wavenumber | None = attr.ib()
-    kperp_widths_theory: tp.Wavenumber | None = attr.ib()
-    kpar_widths_theory: tp.Wavenumber | None = attr.ib()
+    kperp_bins_theory: tp.Wavenumber | None = attr.ib(None)
+    kperp_widths_theory: tp.Wavenumber | None = attr.ib(None)
+    kpar_widths_theory: tp.Wavenumber | None = attr.ib(None)
 
     window_integration_rule: Literal["midpoint", "trapz", "quad"] = attr.ib(
         "midpoint", validator=attr.validators.in_(("midpoint", "trapz", "quad"))
