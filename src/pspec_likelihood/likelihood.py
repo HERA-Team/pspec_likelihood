@@ -148,7 +148,7 @@ class DataModelInterface:
         if not np.isrealobj(val):
             raise TypeError(f"{att.name} must be real!")
 
-        tp.vld_unit("wavenumber", equivalencies=self.cosmologyunits.with_H0(self.cosmology.H0))
+        tp.vld_unit("wavenumber", equivalencies=self.cosmology.units.with_H0(self.cosmology.H0))
 
         if val.shape != self.power_spectrum.shape:
             raise ValueError(f"{att.name} must have same shape as the power spectrum")
@@ -371,7 +371,7 @@ class DataModelInterface:
     def _kconvert(self, k):
         return k.to_value(
             "littleh/Mpc" if self.theory_uses_little_h else "1/Mpc",
-            equivalencies=self.cosmologyunits.with_H0(self.cosmology.H0),
+            equivalencies=self.cosmology.units.with_H0(self.cosmology.H0),
         )
 
     def _discretize(
