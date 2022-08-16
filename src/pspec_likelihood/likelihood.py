@@ -6,8 +6,8 @@ from abc import ABC, abstractmethod
 from typing import Callable, Literal, Sequence
 
 import astropy.cosmology as csm
-import astropy.units as un
 import astropy.cosmology.units as cu
+import astropy.units as un
 import attr
 import hera_pspec as hp
 import numpy as np
@@ -115,7 +115,7 @@ class DataModelInterface:
     covariance: tp.CovarianceType = attr.ib(validator=vld_unit(un.mK**4))
     theory_model: Callable = attr.ib(validator=attr.validators.is_callable())
     sys_model: Callable | None = attr.ib(
-        validator=attr.validators.optional(attr.validators.is_callable())
+        default=None, validator=attr.validators.optional(attr.validators.is_callable())
     )
 
     cosmology: csm.FLRW = attr.ib(
@@ -149,7 +149,9 @@ class DataModelInterface:
         if not np.isrealobj(val):
             raise TypeError(f"{att.name} must be real!")
 
-        tp.vld_unit("wavenumber", equivalencies=csm.units.with_H0(self.cosmology.H0))
+        vld_unit(
+            cu.littleh / un.Mpc, equivalencies=csm.units.with_H0(self.cosmology.H0)
+        )(self, att, val)
 
         if val.shape != self.power_spectrum.shape:
             raise ValueError(f"{att.name} must have same shape as the power spectrum")
@@ -162,6 +164,10 @@ class DataModelInterface:
         if val is not None:
             self._k_validator(att, val)
 
+    @kpar_bins_theory.default
+    def _kpar_theory_default(self):
+        return self.kpar_bins_obs
+
     @window_function.validator
     def _wf_vld(self, att, val):
         if val.shape not in [(len(self.power_spectrum), len(self.power_spectrum))]:
@@ -169,10 +175,8 @@ class DataModelInterface:
 
     @window_integration_rule.validator
     def _wir_vld(self, att, val):
-        if (
-            val != "midpoint"
-            and (self.kperp_widths_theory is None
-            or self.kpar_widths_theory is None)
+        if val != "midpoint" and (
+            self.kperp_widths_theory is None or self.kpar_widths_theory is None
         ):
             raise ValueError(
                 f"if window_integration_rule={val}, kpar/kperp widths are required."
@@ -271,11 +275,9 @@ class DataModelInterface:
         theory_uses_spherical_k
             If True, the theory function only accepts spherical k, rather than
             cylindrical k.
-
         band_index
             Which band (0-indexed) to read, if the file contains multiple
             bands.
-
         set_negative_to_zero
             Whether to treat negative power spectrum measurements as 0.
             Default: True
@@ -285,6 +287,10 @@ class DataModelInterface:
         ???
             DataModelInterface?
         """
+        # Note that the following is a little brittle.
+        if uvp.units == "(mK)^2 h^-3 Mpc^3":
+            uvp.convert_to_deltasq(inplace=True)
+
         # Access the right band
         n_bands = len(uvp.get_all_keys())
         band_key = uvp.get_all_keys()[band_index]
@@ -320,7 +326,7 @@ class DataModelInterface:
             # out of the 24 numbers, the 2nd half corresponded to the
             # 2nd (redundant) set of baselines (check with uvp.blpair_array)
             # so we cut off the part belonging to the other band_key
-            n_b = int(n_perp / n_bands)
+            n_b = n_perp // n_bands
             kperps = kperps[band_index * n_b : (band_index + 1) * n_b]
             n_perp = len(kperps)
             kperp_bins_obs = np.repeat(kperps, n_para)
@@ -334,9 +340,8 @@ class DataModelInterface:
         assert np.shape(power_spectrum) == (
             n_perp,
             n_para,
-        ), "PS shape" " mismatch: {} != ({}, {})".format(
-            np.shape(power_spectrum), n_perp, n_para
-        )
+        ), f"PS shape mismatch: {np.shape(power_spectrum)} != ({n_perp}, {n_para})"
+
         power_spectrum = power_spectrum.reshape((n_perp * n_para), order="C")
         # Todo: This is a bit unintuitive, check if this is the right way round!
         # Get the covariance matrix (units mK**4) of the power spectrum. Since
@@ -355,6 +360,17 @@ class DataModelInterface:
         window_function = block_diag(*wf_3d)
         assert np.shape(window_function) == (n_perp * n_para, n_perp * n_para)
 
+        use_littleh = "h^-3" in uvp.units
+
+        if use_littleh:
+            kpar_bins_obs <<= cu.littleh / un.Mpc
+            if not spherically_averaged:
+                kperp_bins_obs << (cu.littleh / un.Mpc)
+        else:
+            kpar_bins_obs <<= 1 / un.Mpc
+            if not spherically_averaged:
+                kperp_bins_obs << (1 / un.Mpc)
+
         if set_negative_to_zero:
             power_spectrum[power_spectrum < 0] = 0
 
@@ -371,8 +387,9 @@ class DataModelInterface:
 
     def _kconvert(self, k):
         return k.to_value(
-            cu.littleh/un.Mpc if self.theory_uses_little_h else "1/Mpc",
-            equivalencies=cu.with_H0(self.cosmology.H0),)
+            cu.littleh / un.Mpc if self.theory_uses_little_h else "1/Mpc",
+            equivalencies=cu.with_H0(self.cosmology.H0),
+        )
 
     def _discretize(
         self,
@@ -575,6 +592,25 @@ class PSpecLikelihood(ABC):
         """
         pass
 
+    @cached_property
+    def variance(self) -> np.ndarray:
+        """Compute the variance of the likelihood.
+
+        This is the diagonal of the covariance matrix of the likelihood.
+        """
+        return np.diag(self.model.covariance)
+
+    @cached_property
+    def data_mask(self):
+        """A mask where data is properly defined and usable."""
+        mask = self.variance != 0 * un.mK**4
+        if np.any(~mask):
+            warnings.warn(
+                f"Warning: Ignoring data in positions {np.where(~mask)} "
+                "as the variance is zero"
+            )
+        return mask
+
 
 @attr.s(kw_only=True)
 class Gaussian(PSpecLikelihood):
@@ -584,9 +620,10 @@ class Gaussian(PSpecLikelihood):
         """Compute the log likelihood."""
         model = self.model.compute_model(theory_params, sys_params)
         normal = multivariate_normal(
-            mean=self.model.power_spectrum, cov=self.model.covariance
+            mean=self.model.power_spectrum[self.data_mask],
+            cov=self.model.covariance[self.data_mask][:, self.data_mask],
         )
-        return normal.logpdf(model)
+        return normal.logpdf(model[self.data_mask])
 
 
 def logerf_at_large_negative_x(x):
