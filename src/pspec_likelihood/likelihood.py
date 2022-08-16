@@ -7,6 +7,7 @@ from typing import Callable, Literal, Sequence
 
 import astropy.cosmology as csm
 import astropy.units as un
+import astropy.cosmology.units as cu
 import attr
 import hera_pspec as hp
 import numpy as np
@@ -370,9 +371,8 @@ class DataModelInterface:
 
     def _kconvert(self, k):
         return k.to_value(
-            "littleh/Mpc" if self.theory_uses_little_h else "1/Mpc",
-            equivalencies=csm.units.with_H0(self.cosmology.H0),
-        )
+            cu.littleh/un.Mpc if self.theory_uses_little_h else "1/Mpc",
+            equivalencies=cu.with_H0(self.cosmology.H0),
 
     def _discretize(
         self,
