@@ -372,7 +372,7 @@ class DataModelInterface:
     def _kconvert(self, k):
         return k.to_value(
             cu.littleh/un.Mpc if self.theory_uses_little_h else "1/Mpc",
-            equivalencies=cu.with_H0(self.cosmology.H0),
+            equivalencies=cu.with_H0(self.cosmology.H0),)
 
     def _discretize(
         self,
