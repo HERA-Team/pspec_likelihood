@@ -122,11 +122,11 @@ class DataModelInterface:
         csm.Planck18, validator=attr.validators.instance_of(csm.FLRW)
     )
     kpar_bins_obs: tp.Wavenumber = attr.ib()
-    kperp_bins_obs: tp.Wavenumber | None = attr.ib()
+    kperp_bins_obs: tp.Wavenumber | None = attr.ib(None)
     kpar_bins_theory: tp.Wavenumber = attr.ib()
-    kperp_bins_theory: tp.Wavenumber | None = attr.ib()
-    kperp_widths_theory: tp.Wavenumber | None = attr.ib()
-    kpar_widths_theory: tp.Wavenumber | None = attr.ib()
+    kperp_bins_theory: tp.Wavenumber | None = attr.ib(None)
+    kperp_widths_theory: tp.Wavenumber | None = attr.ib(None)
+    kpar_widths_theory: tp.Wavenumber | None = attr.ib(None)
 
     window_integration_rule: Literal["midpoint", "trapz", "quad"] = attr.ib(
         "midpoint", validator=attr.validators.in_(("midpoint", "trapz", "quad"))
@@ -149,7 +149,7 @@ class DataModelInterface:
         if not np.isrealobj(val):
             raise TypeError(f"{att.name} must be real!")
 
-        tp.vld_unit("wavenumber", equivalencies=un.with_H0(self.cosmology.H0))
+        tp.vld_unit("wavenumber", equivalencies=csm.units.with_H0(self.cosmology.H0))
 
         if val.shape != self.power_spectrum.shape:
             raise ValueError(f"{att.name} must have same shape as the power spectrum")
@@ -171,8 +171,8 @@ class DataModelInterface:
     def _wir_vld(self, att, val):
         if (
             val != "midpoint"
-            and self.kperp_widths_theory is None
-            or self.kpar_widths_theory is None
+            and (self.kperp_widths_theory is None
+            or self.kpar_widths_theory is None)
         ):
             raise ValueError(
                 f"if window_integration_rule={val}, kpar/kperp widths are required."
@@ -372,8 +372,7 @@ class DataModelInterface:
     def _kconvert(self, k):
         return k.to_value(
             cu.littleh/un.Mpc if self.theory_uses_little_h else "1/Mpc",
-            equivalencies=un.with_H0(self.cosmology.H0),
-        )
+            equivalencies=cu.with_H0(self.cosmology.H0),
 
     def _discretize(
         self,
