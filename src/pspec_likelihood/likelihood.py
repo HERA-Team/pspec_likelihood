@@ -124,7 +124,7 @@ class DataModelInterface:
     kpar_bins_obs: tp.Wavenumber = attr.ib()
     kperp_bins_obs: tp.Wavenumber | None = attr.ib(None)
     kpar_bins_theory: tp.Wavenumber = attr.ib()
-    kperp_bins_theory: tp.Wavenumber | None = attr.ib(None)
+    kperp_bins_theory: tp.Wavenumber | None = attr.ib()
     kperp_widths_theory: tp.Wavenumber | None = attr.ib(None)
     kpar_widths_theory: tp.Wavenumber | None = attr.ib(None)
 
@@ -167,6 +167,10 @@ class DataModelInterface:
     @kpar_bins_theory.default
     def _kpar_theory_default(self):
         return self.kpar_bins_obs
+
+    @kperp_bins_theory.default
+    def _kperp_theory_default(self):
+        return self.kperp_bins_obs
 
     @window_function.validator
     def _wf_vld(self, att, val):
