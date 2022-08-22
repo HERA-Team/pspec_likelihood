@@ -98,6 +98,8 @@ class DataModelInterface:
         if ``theory_uses_spherical_k`` is True, a single array of ``|k|``.
         The output ``p`` is an array of the same length as ``kperp`` and ``kpar``
         (or simply ``k``), containing the power spectrum in mK^2.
+    sys_model
+        The callable systematics power spectrum, see ``theory_model`` for details.
     theory_param_names
         If given, pass a dictionary of parameters to the ``theory_model`` whose keys
         are the names.
@@ -288,8 +290,8 @@ class DataModelInterface:
 
         Returns
         -------
-        ???
-            DataModelInterface?
+        DataModelInterface
+            Initialized DataModelInterface instance
         """
         # Note that the following is a little brittle.
         if uvp.units == "(mK)^2 h^-3 Mpc^3":
