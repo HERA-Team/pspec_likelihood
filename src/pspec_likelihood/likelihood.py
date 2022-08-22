@@ -270,7 +270,6 @@ class DataModelInterface:
         cls,
         uvp,
         band_index: int = 0,
-        set_negative_to_zero: bool = True,
         theory_uses_spherical_k: bool = False,
         **kwargs,
     ) -> DataModelInterface:
@@ -284,9 +283,6 @@ class DataModelInterface:
         band_index
             Which band (0-indexed) to read, if the file contains multiple
             bands.
-        set_negative_to_zero
-            Whether to treat negative power spectrum measurements as 0.
-            Default: True
 
         Returns
         -------
@@ -376,9 +372,6 @@ class DataModelInterface:
             kpar_bins_obs <<= 1 / un.Mpc
             if not spherically_averaged:
                 kperp_bins_obs << (1 / un.Mpc)
-
-        if set_negative_to_zero:
-            power_spectrum[power_spectrum < 0] = 0
 
         return DataModelInterface(
             theory_uses_spherical_k=theory_uses_spherical_k,
@@ -577,9 +570,12 @@ class PSpecLikelihood(ABC):
     model
         An instance of :class:`DataModelInterface` that is used to do the transformation
         from theory to data space.
+    set_negative_to_zero
+        Whether to treat negative power spectrum values as zero.
     """
 
     model: DataModelInterface = attr.ib()
+    set_negative_to_zero: bool = attr.ib(default=False, converter=bool)
 
     def __attrs_post_init__(self):
         """Do stuff after initialization."""
@@ -597,6 +593,18 @@ class PSpecLikelihood(ABC):
         rules that might be particular to the likelihood (eg. diagonal covariance).
         """
         pass
+
+    @cached_property
+    def power_spectrum(self) -> tp.PowerType:
+        """Return power_spectrum respecting set_negative_to_zero.
+
+        Return model.power_spectrum if not set_negative_to_zero, otherwise
+        return zero where model.power_spectrum is negative.
+        """
+        ps = self.model.power_spectrum.copy()
+        if self.set_negative_to_zero:
+            ps[ps<0] = 0
+        return ps
 
     @cached_property
     def variance(self) -> np.ndarray:
@@ -626,7 +634,7 @@ class Gaussian(PSpecLikelihood):
         """Compute the log likelihood."""
         model = self.model.compute_model(theory_params, sys_params)
         normal = multivariate_normal(
-            mean=self.model.power_spectrum[self.data_mask],
+            mean=self.power_spectrum[self.data_mask],
             cov=self.model.covariance[self.data_mask][:, self.data_mask],
         )
         return normal.logpdf(model[self.data_mask])
@@ -689,7 +697,7 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         assert not sys_params
 
         model = self.model.compute_model(theory_params, sys_params)[self.data_mask]
-        data = self.model.power_spectrum[self.data_mask]
+        data = self.power_spectrum[self.data_mask]
         residuals = data - model
 
         residuals_over_errors = (
@@ -756,7 +764,7 @@ class GaussianLinearSystematics(PSpecLikelihood):
 
         model = self.model.compute_model(theory_params, tuple(sys_params) + mu_linear)
         normal = multivariate_normal(
-            mean=self.model.power_spectrum, cov=self.model.covariance
+            mean=self.power_spectrum, cov=self.model.covariance
         )
 
         prior = multivariate_normal(
