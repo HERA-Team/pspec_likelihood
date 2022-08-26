@@ -1,4 +1,5 @@
 """Test loading an UVPspec file"""
+from __future__ import annotations
 
 import astropy.units as un
 import numpy as np
