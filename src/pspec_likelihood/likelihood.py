@@ -14,7 +14,7 @@ import numpy as np
 from cached_property import cached_property
 from scipy.integrate import quad
 from scipy.linalg import block_diag
-from scipy.special import erf
+from scipy.special import erfcx
 from scipy.stats import multivariate_normal
 
 from . import types as tp
@@ -670,11 +670,6 @@ class Gaussian(PSpecLikelihood):
         return normal.logpdf(model[self.data_mask])
 
 
-def logerf_at_large_negative_x(x):
-    """Compute a stable log of 1 - erf(x) at large x."""
-    return -(x**2) - 0.5 * np.log(np.pi) - np.log(np.abs(x))
-
-
 @attr.s(kw_only=True)
 class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
     """The likelihood used in IDR2 analysis.
@@ -732,11 +727,13 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
             residuals / np.sqrt(2 * self.variance[self.data_mask])
         ).value
 
-        log1perf = np.where(
-            residuals_over_errors > -5,
-            np.log1p(erf(residuals_over_errors)),
-            logerf_at_large_negative_x(residuals_over_errors),
-        )
+        # We have 1 + erf(x) == 1 - erf(-x) == erfc(-x)
+        # The erfc function is MUCH more stable at high x than erf is at large negative
+        # x. However, even erfc will only be stable out to x~-25. To go further, we use
+        # the erfcx function, which is equal to exp(-x**2)*erfc(x). This is stable out
+        # to at least x~-300, which is more than we'll ever need, and is equal to erfc
+        # to within 1e-14 over all this range (even for large positive x).
+        log1perf = np.log(erfcx(-residuals_over_errors)) - residuals_over_errors**2
 
         loglike = np.log(0.5) + log1perf
 

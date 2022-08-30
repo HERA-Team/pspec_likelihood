@@ -43,8 +43,12 @@ def test_like():
         kpar_widths_theory=1e-2 * np.ones(40) / un.Mpc,
         kperp_widths_theory=None,
     )
-    lk_normal = MarginalizedLinearPositiveSystematics(model=dmi1, set_negative_to_zero=False)
-    lk_zeroed = MarginalizedLinearPositiveSystematics(model=dmi1, set_negative_to_zero=True)
+    lk_normal = MarginalizedLinearPositiveSystematics(
+        model=dmi1, set_negative_to_zero=False
+    )
+    lk_zeroed = MarginalizedLinearPositiveSystematics(
+        model=dmi1, set_negative_to_zero=True
+    )
     result_normal = lk_normal.loglike([0, -0.1], [])
     result_zeroed = lk_zeroed.loglike([0, -0.1], [])
     assert np.allclose(result_normal, -30.61810682, rtol=0, atol=1e-6), (
