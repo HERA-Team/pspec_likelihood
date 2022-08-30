@@ -364,14 +364,17 @@ class DataModelInterface:
 
         use_littleh = "h^-3" in uvp.units
 
-        if use_littleh:
-            kpar_bins_obs <<= cu.littleh / un.Mpc
+        if not isinstance(kpar_bins_obs, un.Quantity):
+            if use_littleh:
+                unit = cu.littleh / un.Mpc
+            else:
+                unit = un.Mpc**-1
+
+            print(unit, type(unit), type(kpar_bins_obs))
+
+            kpar_bins_obs <<= unit
             if not spherically_averaged:
-                kperp_bins_obs << (cu.littleh / un.Mpc)
-        else:
-            kpar_bins_obs <<= 1 / un.Mpc
-            if not spherically_averaged:
-                kperp_bins_obs << (1 / un.Mpc)
+                kperp_bins_obs <<= unit
 
         return DataModelInterface(
             theory_uses_spherical_k=theory_uses_spherical_k,
@@ -603,7 +606,7 @@ class PSpecLikelihood(ABC):
         """
         ps = self.model.power_spectrum.copy()
         if self.set_negative_to_zero:
-            ps[ps<0] = 0
+            ps[ps < 0] = 0
         return ps
 
     @cached_property
@@ -657,8 +660,6 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         to avoid errors in sampling libraries used.
     """
 
-    zero_fill: float = attr.ib(default=-100)
-
     def validate(self):
         """Ensure the model has diagonal covariance and no systematics model."""
         if not np.all(
@@ -711,8 +712,6 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         )
 
         loglike = np.log(0.5) + log1perf
-        if self.zero_fill > 0:
-            loglike[np.isinf(loglike)] = self.zero_fill
 
         return np.sum(loglike)
 
