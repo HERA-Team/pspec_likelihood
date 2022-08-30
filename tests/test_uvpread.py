@@ -51,8 +51,13 @@ def test_uvpread_non_averaged():
     # read data file into UVData object
     uvd = UVData()
     uvd.read_uvh5(datafile)
+    beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+    uvb = hp.pspecbeam.PSpecBeamUV(beamfile, cosmo=None)
+    Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol="xx")
+    # reshape to appropriately match a UVData.data_array object and multiply in!
+    uvd.data_array *= Jy_to_mK[None, None, :, None]
     # Create a new PSpecData object, and don't forget to feed the beam object
-    ds = hp.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
+    ds = hp.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
     # choose baselines
     baselines1, baselines2, blpairs = hp.utils.construct_blpairs(
         uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
