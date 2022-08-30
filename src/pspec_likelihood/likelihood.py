@@ -269,7 +269,8 @@ class DataModelInterface:
     def from_uvpspec(
         cls,
         uvp,
-        band_index: int = 0,
+        spw: int = 0,
+        polpair_index: int = 0,
         theory_uses_spherical_k: bool = False,
         **kwargs,
     ) -> DataModelInterface:
@@ -290,20 +291,24 @@ class DataModelInterface:
             Initialized DataModelInterface instance
         """
         # Note that the following is a little brittle.
-        if uvp.units == "(mK)^2 h^-3 Mpc^3":
+        if " k^3 / (2pi^2)" not in uvp.norm_units:
+            warnings.warn("Converting to Delta^2 in place...")
             uvp.convert_to_deltasq(inplace=True)
 
-        # Access the right band
-        n_bands = len(uvp.get_all_keys())
-        band_key = uvp.get_all_keys()[band_index]
-        spw_index = uvp.spw_array[band_index]
-        # Get redshift (i.e. spherical window)
-        # Note: get_spw_ranges returns minimum and maximum frequenc
-        #       as first two elements i.e. [:2]
-        spw_frequencies = uvp.get_spw_ranges()[spw_index][:2]
+        if "(mK)^2" not in uvp.units:
+            raise ValueError("Power Spectrum must be in mK^2 units.")
+
+        if uvp.Ntimes > 1:
+            raise ValueError(
+                "The UVPSpec object has not been fully time-averaged. "
+                "Please time-average with uvp.average_spectra(time_avg=True) before "
+                "passing to DataModelInterface.from_uvpspec"
+            )
+
+        spw_frequencies = uvp.get_spw_ranges()[spw][:2]
         redshift = uvp.cosmo.f2z(np.mean(spw_frequencies))
         # Get wavenumbers parallel to line of sight
-        kparas = uvp.get_kparas(spw_index)
+        kparas = uvp.get_kparas(spw)
         n_para = len(kparas)
         # Get wavenumbers perpendicular to line of sight
         # Check if the data has been spherically averaged, in that
@@ -311,38 +316,53 @@ class DataModelInterface:
         spherically_averaged = "Spherically averaged with hera_pspec" in uvp.history
         if spherically_averaged:
             assert (
-                len(uvp.get_kperps(0)) == 1
-            ), "data says it is spherically averaged but len(uvp.get_kperps(0)) is >1"
+                len(uvp.get_kperps(spw)) == 1
+            ), "data says it is spherically averaged but len(uvp.get_kperps(spw)) is >1"
             assert np.isclose(
-                uvp.get_kperps(0)[0], 0, atol=1e-11, rtol=0
-            ), "data says it is spherically averaged but uvp.get_kperps(0)[0] is >> 0"
+                uvp.get_kperps(spw)[0], 0, atol=1e-11, rtol=0
+            ), "data says it is spherically averaged but uvp.get_kperps(spw)[0] is >> 0"
             n_perp = 1
             kperp_bins_obs = None
         else:
             # Otherwise get kperp from uvp. Note that get_kperps() returns
             # all the baselines, including the redundant ones that are
             # combined in the power spectrum data.
-            kperps = uvp.get_kperps(spw_index)
-            n_perp = len(kperps)
-            # Todo: I have only checked this for one example, but there
-            # out of the 24 numbers, the 2nd half corresponded to the
-            # 2nd (redundant) set of baselines (check with uvp.blpair_array)
-            # so we cut off the part belonging to the other band_key
-            n_b = n_perp // n_bands
-            kperps = kperps[band_index * n_b : (band_index + 1) * n_b]
+            kperps = uvp.get_kperps(spw)
+            if any(len(x) > 1 for x in uvp.get_red_blpairs()[0]):
+                warnings.warn(
+                    "The UVPSpec object is not redundantly averaged. "
+                    "This may result in poor speed due to having more individual kperps"
+                    " than statistically necessary. However, results should be the "
+                    "same. Continuing..."
+                )
+
             n_perp = len(kperps)
             kperp_bins_obs = np.repeat(kperps, n_para)
+
         # Tile parallel wavenumbers correspondingly
         kpar_bins_obs = np.tile(kparas, n_perp)
 
         # Get the dimensionless power spectra \Delta^2 (units mK**2) and
         # flatten the shape (N_perp, N_para) to (N_perp*N_para), index such
         # that k_par changes the fastest.
-        power_spectrum = uvp.get_data(band_key).real.copy()
-        assert np.shape(power_spectrum) == (
-            n_perp,
-            n_para,
-        ), f"PS shape mismatch: {np.shape(power_spectrum)} != ({n_perp}, {n_para})"
+        poltuples = [hp.uvpspec_utils.polpair_int2tuple(x) for x in uvp.polpair_array]
+        pol = poltuples[polpair_index]
+        if len(uvp.polpair_array) > 1:
+            warnings.warn(
+                "There is more than one polpair in your UVPSpec object. "
+                f"Using polpair '{pol}', but you might want to make sure this is what "
+                f"you want. Possible values are: {poltuples}, set the one you want by"
+                " setting polpair_index"
+            )
+        keys = [x for x in uvp.get_all_keys() if (x[0] == spw and x[2] == pol)]
+
+        # Taking the zeroth index because it is time, which we have already checked has
+        # length one. So, this will ultimately give an array of size (n_kperp, nkpar)
+        power_spectrum = np.array([uvp.get_data(k).real.copy()[0] for k in keys])
+        if power_spectrum.shape != (n_perp, n_para):
+            raise ValueError(
+                f"PS shape mismatch: {np.shape(power_spectrum)} != ({n_perp}, {n_para})"
+            )
 
         power_spectrum = power_spectrum.reshape((n_perp * n_para), order="C")
         # Todo: This is a bit unintuitive, check if this is the right way round!
@@ -351,13 +371,21 @@ class DataModelInterface:
         # block-diagonal on the (N_perp*N_para)-long reshaped axis.
         # get_cov() essentially returns a list of these N_perp blocks, each
         # of shape (N_para, N_para).
-        cov_3d = uvp.get_cov(band_key).real.copy()
+        try:
+            cov_3d = np.array([uvp.get_cov(k).real.copy()[0] for k in keys])
+        except AttributeError as e:
+            raise AttributeError(
+                "Covariance matrix is not defined on the UVPspec object"
+            ) from e
+
         assert np.shape(cov_3d) == (n_perp, n_para, n_para)
         covariance = block_diag(*cov_3d)
+        assert covariance.shape == (n_perp, n_perp, n_para, n_para)
         assert np.shape(covariance) == (n_perp * n_para, n_perp * n_para)
+
         # Window functions -- same deal as with the covariance. Block diagonal
         # matrix where each block is the k_par window function for one k_perp.
-        wf_3d = uvp.get_window_function(band_key)
+        wf_3d = np.array([uvp.get_window_function(k)[0] for k in keys])
         assert np.shape(wf_3d) == (n_perp, n_para, n_para)
         window_function = block_diag(*wf_3d)
         assert np.shape(window_function) == (n_perp * n_para, n_perp * n_para)
@@ -370,19 +398,18 @@ class DataModelInterface:
             else:
                 unit = un.Mpc**-1
 
-            print(unit, type(unit), type(kpar_bins_obs))
-
             kpar_bins_obs <<= unit
             if not spherically_averaged:
                 kperp_bins_obs <<= unit
 
+        # TODO: also get the cosmology from the uvp.
         return DataModelInterface(
             theory_uses_spherical_k=theory_uses_spherical_k,
             redshift=redshift,
             kperp_bins_obs=kperp_bins_obs,
             kpar_bins_obs=kpar_bins_obs,
-            power_spectrum=power_spectrum * un.mK**2,
-            covariance=covariance * un.mK**4,
+            power_spectrum=power_spectrum << un.mK**2,
+            covariance=covariance << un.mK**4,
             window_function=window_function,
             **kwargs,
         )
