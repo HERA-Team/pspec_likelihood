@@ -1,5 +1,6 @@
 """Test loading an UVPspec file"""
 import os
+import pytest
 
 import astropy.units as un
 import hera_pspec as hp
@@ -7,7 +8,6 @@ import numpy as np
 from astropy.cosmology import units as cu
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
-
 from pspec_likelihood import DataModelInterface
 
 
@@ -38,17 +38,15 @@ def test_uvpread_averaged():
     # Note: Spherical average message usually in `uvp.history.split("\n")[0]`
 
 
-def test_uvpread_non_averaged():
+def test_uvpread_no_units():
     from pspec_likelihood import DataModelInterface
-
-    uvp1 = DataModelInterface.uvpspec_from_h5_files(
-        field="1", datapath_format="./tests/data/pspec_h1c_idr2_field{}.h5"
-    )
-    # Make a non spherically-averaged file from the UVData() object
-
     dfile = "zen.2458116.31939.HH.uvh5"
     datafile = os.path.join(DATA_PATH, dfile)
-    # read data file into UVData object
+    # This object currently has
+    # a) No units (calibration)
+    # b) No time averaging
+    # c) Is not spherically averaged
+    # Make tests for all these cases, for now test (a)
     uvd = UVData()
     uvd.read_uvh5(datafile)
     beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
@@ -73,18 +71,19 @@ def test_uvpread_non_averaged():
         store_cov=True,
         verbose=False,
     )
-    uvp2.cosmo = uvp1.cosmo
-    dmi2 = DataModelInterface.from_uvpspec(
-        uvp2,
-        band_index=0,
-        theory_model=dummy_theory_model,
-        sys_model=dummy_sys_model,
-        kpar_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-        kperp_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-        kpar_widths_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-        kperp_widths_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-    )
-    assert np.shape(dmi2.kperp_bins_obs) == (20 * 12,), np.shape(dmi2.kperp_bins_obs)
-    assert np.shape(dmi2.kpar_bins_obs) == (20 * 12,), np.shape(dmi2.kpar_bins_obs)
-    assert np.shape(dmi2.power_spectrum) == (20 * 12,), np.shape(dmi2.power_spectrum)
-    assert np.shape(dmi2.covariance) == (20 * 12, 20 * 12), np.shape(dmi2.covariance)
+    with pytest.raises(ValueError) as e:
+        dmi2 = DataModelInterface.from_uvpspec(
+            uvp2,
+            band_index=0,
+            theory_model=dummy_theory_model,
+            sys_model=dummy_sys_model,
+            kpar_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
+            kperp_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
+            kpar_widths_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
+            kperp_widths_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
+        )
+    assert str(e.value)=="Power Spectrum must be in mK^2 units."
+    #assert np.shape(dmi2.kperp_bins_obs) == (20 * 12,), np.shape(dmi2.kperp_bins_obs)
+    #assert np.shape(dmi2.kpar_bins_obs) == (20 * 12,), np.shape(dmi2.kpar_bins_obs)
+    #assert np.shape(dmi2.power_spectrum) == (20 * 12,), np.shape(dmi2.power_spectrum)
+    #assert np.shape(dmi2.covariance) == (20 * 12, 20 * 12), np.shape(dmi2.covariance)
