@@ -381,7 +381,6 @@ class DataModelInterface:
 
         assert np.shape(cov_3d) == (n_perp, n_para, n_para)
         covariance = block_diag(*cov_3d)
-        assert covariance.shape == (n_perp, n_perp, n_para, n_para)
         assert np.shape(covariance) == (n_perp * n_para, n_perp * n_para)
 
         # Window functions -- same deal as with the covariance. Block diagonal
