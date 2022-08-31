@@ -345,7 +345,8 @@ class DataModelInterface:
         # Get the dimensionless power spectra \Delta^2 (units mK**2) and
         # flatten the shape (N_perp, N_para) to (N_perp*N_para), index such
         # that k_par changes the fastest.
-        poltuples = [hp.uvpspec_utils.polpair_int2tuple(x) for x in uvp.polpair_array]
+        poltuples = [hp.uvpspec_utils.polpair_int2tuple(x, pol_strings=True) 
+                     for x in uvp.polpair_array]
         pol = poltuples[polpair_index]
         if len(uvp.polpair_array) > 1:
             warnings.warn(
