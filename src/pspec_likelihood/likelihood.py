@@ -402,7 +402,14 @@ class DataModelInterface:
             if not spherically_averaged:
                 kperp_bins_obs <<= unit
 
-        # TODO: also get the cosmology from the uvp.
+        if hasattr(uvp, 'cosmo'):
+            cosmo = csm.LambdaCDM(H0=uvp.cosmo.H0,
+                                  Om0=uvp.cosmo.Om_M,
+                                  Ode0=uvp.cosmo.Om_L,
+                                  )
+        else:
+            cosmo = csm.Planck18
+
         return DataModelInterface(
             theory_uses_spherical_k=theory_uses_spherical_k,
             redshift=redshift,
@@ -411,6 +418,7 @@ class DataModelInterface:
             power_spectrum=power_spectrum << un.mK**2,
             covariance=covariance << un.mK**4,
             window_function=window_function,
+            cosmology=cosmo,
             **kwargs,
         )
 
