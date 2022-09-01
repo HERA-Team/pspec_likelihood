@@ -19,7 +19,7 @@ def dummy_sys_model(z, k):
     return 1 * un.mK**2
 
 
-def prepare_uvp_object(path_to_wf = '../tests/data/',
+def prepare_uvp_object(path_to_wf = 'tests/data/',
                        dfile = 'data_calibrated_testfile.h5',
                        time_avg=True, spherical_avg=True, redundant_avg=True):
     # Based on https://github.com/HERA-Team/pspec_likelihood/blob/api_idr2like/dvlpt/tests_data_file.ipynb
