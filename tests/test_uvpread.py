@@ -145,7 +145,7 @@ def test_exception_no_units():
     with pytest.raises(ValueError) as e:
         dmi = DataModelInterface.from_uvpspec(
             uvp,
-            band_index=0,
+            spw=0,
             theory_model=dummy_theory_model,
             sys_model=dummy_sys_model,
             kpar_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
@@ -164,7 +164,7 @@ def test_IDR2_file():
     )
     dmi1 = DataModelInterface.from_uvpspec(
         uvp1,
-        band_index=1,
+        spw=1,
         theory_model=dummy_theory_model,
         sys_model=dummy_sys_model,
         kpar_bins_theory=np.ones(40) * (1 / un.Mpc),

@@ -34,7 +34,7 @@ def test_like():
     )
     dmi1 = DataModelInterface.from_uvpspec(
         uvp1,
-        band_index=1,
+        spw=1,
         theory_model=powerlaw_eor_spherical,
         sys_model=None,
         theory_uses_spherical_k=True,
