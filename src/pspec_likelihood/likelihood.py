@@ -315,6 +315,7 @@ class DataModelInterface:
         # case we use kpar by convention and kperp is set to None.
         spherically_averaged = "Spherically averaged with hera_pspec" in uvp.history
         if spherically_averaged:
+            print("Treating as spherically averaged")
             assert (
                 len(uvp.get_kperps(spw)) == 1
             ), "data says it is spherically averaged but len(uvp.get_kperps(spw)) is >1"
@@ -324,6 +325,7 @@ class DataModelInterface:
             n_perp = 1
             kperp_bins_obs = None
         else:
+            print("Treating as cylindrical PS")
             # Otherwise get kperp from uvp. Note that get_kperps() returns
             # all the baselines, including the redundant ones that are
             # combined in the power spectrum data.
