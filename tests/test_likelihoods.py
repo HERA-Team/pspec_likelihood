@@ -5,6 +5,7 @@ import astropy.units as un
 import numpy as np
 import pytest
 from astropy import cosmology
+import astropy.cosmology.units as cu
 
 from pspec_likelihood import (
     DataModelInterface,
@@ -18,6 +19,11 @@ def powerlaw_eor_spherical(z: float, k: np.ndarray, params: list[float]) -> np.n
     return k**3 / (2 * np.pi**2) * amplitude * un.mK**2 * (1.0 + z) / k**index
 
 
+def powerlaw_eor_spherical_littleh(z: float, k: np.ndarray, params: list[float]) -> np.ndarray:
+    amplitude, index = params
+    return (k/cu.littleh)**3 / (2 * np.pi**2) * amplitude * un.mK**2 * (1.0 + z) / (k/cu.littleh)**index
+
+
 def powerlaw_eor_cylindrical(
     z: float, kcyl: tuple[np.ndarray, np.ndarray], params: list[float]
 ) -> np.ndarray:
@@ -25,7 +31,6 @@ def powerlaw_eor_cylindrical(
     kperp, kpar = kcyl
     k = np.sqrt(kperp**2 + kpar**2)
     return k**3 / (2 * np.pi**2) * amplitude * un.mK**2 * (1.0 + z) / k**index
-
 
 def test_like():
     """Load from tests/data/pspec_h1c_idr2_field{}.h5"""
@@ -61,6 +66,49 @@ def test_like():
     )
     return result_normal, lk_zeroed
 
+
+def test_little_h():
+    """Load from tests/data/pspec_h1c_idr2_field{}.h5"""
+    uvp = DataModelInterface.uvpspec_from_h5_files(
+        field="1", datapath_format="./tests/data/pspec_h1c_idr2_field{}.h5"
+    )
+    dmi1 = DataModelInterface.from_uvpspec(
+        uvp,
+        spw=1,
+        theory_model=powerlaw_eor_spherical,
+        theory_uses_little_h=False,
+        sys_model=None,
+        theory_uses_spherical_k=True,
+        kpar_bins_theory=np.linspace(0.1, 1, 40) / un.Mpc,
+        kperp_bins_theory=None,
+        kpar_widths_theory=1e-2 * np.ones(40) / un.Mpc,
+        kperp_widths_theory=None,
+    )
+    dmi2 = DataModelInterface.from_uvpspec(
+        uvp,
+        spw=1,
+        theory_model=powerlaw_eor_spherical_littleh,
+        theory_uses_little_h=True,
+        sys_model=None,
+        theory_uses_spherical_k=True,
+        kpar_bins_theory=np.linspace(0.1, 1, 40) / un.Mpc,
+        kperp_bins_theory=None,
+        kpar_widths_theory=1e-2 * np.ones(40) / un.Mpc,
+        kperp_widths_theory=None,
+    )
+
+
+    lk_no_littleh = MarginalizedLinearPositiveSystematics(
+        model=dmi1, set_negative_to_zero=False
+    )
+    lk_with_littleh = MarginalizedLinearPositiveSystematics(
+        model=dmi1, set_negative_to_zero=False
+    )
+    assert np.all(lk_no_littleh==lk_with_littleh)
+    return lk_with_littleh
+
+
+#theory_uses_little_h is False by default
 
 @pytest.fixture(scope="session")
 def dmi_spherical():
