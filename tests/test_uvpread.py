@@ -19,8 +19,9 @@ def dummy_sys_model(z, k):
     return 1 * un.mK**2
 
 
-def prepare_uvp_object(path_to_wf = '../tests/data/', spherical=True,
-                       dfile = 'data_calibrated_testfile.h5', time_avg=True):
+def prepare_uvp_object(path_to_wf = '../tests/data/',
+                       dfile = 'data_calibrated_testfile.h5',
+                       time_avg=True, spherical_avg=True, redundant_avg=True):
     # Based on https://github.com/HERA-Team/pspec_likelihood/blob/api_idr2like/dvlpt/tests_data_file.ipynb
     uvd = UVData()
     uvd.read_uvh5(os.path.join(path_to_wf, dfile))
@@ -38,42 +39,49 @@ def prepare_uvp_object(path_to_wf = '../tests/data/', spherical=True,
     uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('pI', 'pI')], 
                    spw_ranges=(175, 195), taper='bh', verbose=False,
                    store_cov=True, store_window=True, baseline_tol=100.)
-    print(uvp.Nblpairs, uvp.data_array[0].shape, uvp.Ntimes)
+    print("There are",uvp.Nblpairs,"baseline pairs at", uvp.Ntimes, "times -->", uvp.data_array[0].shape[0])
+    print("Furthermore we have", uvp.data_array[0].shape[1],"kparas (freq).")
+    print("Thus the data array has shape", uvp.data_array[0].shape)
     # get redundant groups
     blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
     # there are baseline pairs that do not belong to a redundant group
     extra_blpairs = set(uvp.blpair_array) - set([blp for blpg in blpair_groups for blp in blpg])
-    print(len(extra_blpairs))
     # only keep blpairs in redundant groups
     uvp.select(blpairs=[blp for blpg in blpair_groups for blp in blpg])
-    print(uvp.Nblpairs, uvp.data_array[0].shape)
+    print("Out of those baselines pairs skip",len(extra_blpairs),
+          "that are not part of redunant groups, leaving", uvp.Nblpairs,
+          "in two groups of", len(blpair_groups), ":", blpair_groups)
+    print("Data array shape with these only", uvp.data_array[0].shape)
     # perform redundant average
-    uvp.average_spectra(blpair_groups=blpair_groups, time_avg=time_avg)
-    print(uvp.Nblpairs, uvp.data_array[0].shape)
+    if redundant_avg:
+        uvp.average_spectra(blpair_groups=blpair_groups)
+    print("Data array shape after redundant average", uvp.data_array[0].shape)
+    if time_avg:
+        uvp.average_spectra(time_avg=time_avg)
+        print("Data array shape after time average", uvp.data_array[0].shape)
     kbins = np.linspace(0.1, 2.5, 40)
-    if spherical:
+    if spherical_avg:
         sph = hp.grouping.spherical_average(uvp, kbins, np.diff(kbins).mean())
-    return uvp
+        print("Data array shape after spherical average", sph.data_array[0].shape)
+        return sph
+    else:
+        return uvp
 
 
 def test_spherical_PS():
     uvp = prepare_uvp_object()
-    spherically_averaged = "Spherically averaged with hera_pspec" in uvp.history
-    print("spherically_averaged =", spherically_averaged)
-    print(uvp.history)
     dmi = DataModelInterface.from_uvpspec(uvp=uvp,
                                           spw=0,
                                           theory_model=dummy_theory_model,
                                           theory_uses_spherical_k=True)
-    # Note: Is not treated as spherically averaged because history says
-    # Spectra averaged with hera_pspec [eefa537c8cdfe62]
-    # rather than "Spherically averaged ..." which is what we check for
+    assert np.shape(dmi.covariance) == (40, 40)  # right shape
+    assert np.shape(dmi.kpar_bins_obs) == (40,)  # right shape
     assert dmi.kperp_bins_obs is None  # data should be sperically averaged
     return dmi
 
 
 def test_cylindrical_PS():
-    uvp = prepare_uvp_object(spherical=False)
+    uvp = prepare_uvp_object(spherical_avg=False)
     dmi = DataModelInterface.from_uvpspec(uvp=uvp,
                                           spw=0,
                                           theory_model=dummy_theory_model,
@@ -98,13 +106,13 @@ def test_exception_no_time_avg():
                           "DataModelInterface.from_uvpspec")
 
 
-# Todo
-# def test_warning_not_redundantly_averaged():
-#     uvp = prepare_uvp_object()
-#     dmi = DataModelInterface.from_uvpspec(uvp=uvp,
-#                                           spw=0,
-#                                           theory_model=dummy_theory_model,
-#                                           theory_uses_spherical_k=True)
+def test_warning_not_redundantly_averaged():
+    uvp = prepare_uvp_object(redundant_avg=False, spherical_avg=False)
+    dmi = DataModelInterface.from_uvpspec(uvp=uvp,
+                                          spw=0,
+                                          theory_model=dummy_theory_model,
+                                          theory_uses_spherical_k=True)
+    # Todo: How to catch the warning?
 
 
 def test_exception_no_units():
@@ -147,10 +155,6 @@ def test_exception_no_units():
         )
     print(e)
     assert str(e.value)=="Power Spectrum must be in mK^2 units."
-    #assert np.shape(dmi2.kperp_bins_obs) == (20 * 12,), np.shape(dmi2.kperp_bins_obs)
-    #assert np.shape(dmi2.kpar_bins_obs) == (20 * 12,), np.shape(dmi2.kpar_bins_obs)
-    #assert np.shape(dmi2.power_spectrum) == (20 * 12,), np.shape(dmi2.power_spectrum)
-    #assert np.shape(dmi2.covariance) == (20 * 12, 20 * 12), np.shape(dmi2.covariance)
 
 
 def test_IDR2_file():
