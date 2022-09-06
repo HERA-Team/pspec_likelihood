@@ -36,7 +36,7 @@ def vld_unit(
         # really a physical type.
         u.get_physical_type(unit)
 
-    def _check_type(self: Any, att: attr.Attribute, val: Any):
+    def _check_type(self, att: attr.Attribute, val: Any):
         if not isinstance(val, u.Quantity):
             raise TypeError(f"{att.name} must be an astropy Quantity!")
 
