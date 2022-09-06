@@ -315,6 +315,7 @@ class DataModelInterface:
         # case we use kpar by convention and kperp is set to None.
         spherically_averaged = "Spherically averaged with hera_pspec" in uvp.history
         if spherically_averaged:
+            print("Treating as spherically averaged")
             assert (
                 len(uvp.get_kperps(spw)) == 1
             ), "data says it is spherically averaged but len(uvp.get_kperps(spw)) is >1"
@@ -324,6 +325,7 @@ class DataModelInterface:
             n_perp = 1
             kperp_bins_obs = None
         else:
+            print("Treating as cylindrical PS")
             # Otherwise get kperp from uvp. Note that get_kperps() returns
             # all the baselines, including the redundant ones that are
             # combined in the power spectrum data.
@@ -395,16 +397,20 @@ class DataModelInterface:
         use_littleh = "h^-3" in uvp.units
 
         if not isinstance(kpar_bins_obs, un.Quantity):
-            if use_littleh:
-                unit = cu.littleh / un.Mpc
-            else:
-                unit = un.Mpc**-1
-
+            unit = cu.littleh / un.Mpc if use_littleh else un.Mpc**-1
             kpar_bins_obs <<= unit
             if not spherically_averaged:
                 kperp_bins_obs <<= unit
 
-        # TODO: also get the cosmology from the uvp.
+        if hasattr(uvp, "cosmo"):
+            cosmo = csm.LambdaCDM(
+                H0=uvp.cosmo.H0,
+                Om0=uvp.cosmo.Om_M,
+                Ode0=uvp.cosmo.Om_L,
+            )
+        else:
+            cosmo = csm.Planck18
+
         return DataModelInterface(
             theory_uses_spherical_k=theory_uses_spherical_k,
             redshift=redshift,
@@ -413,6 +419,7 @@ class DataModelInterface:
             power_spectrum=power_spectrum << un.mK**2,
             covariance=covariance << un.mK**4,
             window_function=window_function,
+            cosmology=cosmo,
             **kwargs,
         )
 
