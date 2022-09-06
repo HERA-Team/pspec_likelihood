@@ -742,7 +742,14 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         # the erfcx function, which is equal to exp(-x**2)*erfc(x). This is stable out
         # to at least x~-300, which is more than we'll ever need, and is equal to erfc
         # to within 1e-14 over all this range (even for large positive x).
-        log1perf = np.log(erfcx(-residuals_over_errors)) - residuals_over_errors**2
+        # If x is larger than 25, the erfcx function goes to infinity and so we swap
+        # over to log(2) == log(1 + erf(infinity)).
+        log2 = np.log(2)
+        log1perf = np.where(
+            residuals_over_errors < 25,
+            np.log(erfcx(-residuals_over_errors)) - residuals_over_errors**2,
+            log2,
+        )
 
         loglike = np.log(0.5) + log1perf
 
