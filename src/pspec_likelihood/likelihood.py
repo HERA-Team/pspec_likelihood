@@ -296,7 +296,7 @@ class DataModelInterface:
             uvp.convert_to_deltasq(inplace=True)
 
         if "(mK)^2" not in uvp.units:
-            raise ValueError("Power Spectrum must be in mK^2 units.")
+            raise ValueError(f"Power Spectrum must be in mK^2 units. Got {uvp.units}")
 
         if uvp.Ntimes > 1:
             raise ValueError(
@@ -345,7 +345,10 @@ class DataModelInterface:
         # Get the dimensionless power spectra \Delta^2 (units mK**2) and
         # flatten the shape (N_perp, N_para) to (N_perp*N_para), index such
         # that k_par changes the fastest.
-        poltuples = [hp.uvpspec_utils.polpair_int2tuple(x) for x in uvp.polpair_array]
+        poltuples = [
+            hp.uvpspec_utils.polpair_int2tuple(x, pol_strings=True)
+            for x in uvp.polpair_array
+        ]
         pol = poltuples[polpair_index]
         if len(uvp.polpair_array) > 1:
             warnings.warn(
@@ -380,7 +383,6 @@ class DataModelInterface:
 
         assert np.shape(cov_3d) == (n_perp, n_para, n_para)
         covariance = block_diag(*cov_3d)
-        assert covariance.shape == (n_perp, n_perp, n_para, n_para)
         assert np.shape(covariance) == (n_perp * n_para, n_perp * n_para)
 
         # Window functions -- same deal as with the covariance. Block diagonal

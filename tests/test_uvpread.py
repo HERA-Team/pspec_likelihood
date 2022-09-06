@@ -26,7 +26,7 @@ def test_uvpread_averaged():
     )
     dmi1 = DataModelInterface.from_uvpspec(
         uvp1,
-        band_index=1,
+        spw=1,
         theory_model=dummy_theory_model,
         sys_model=dummy_sys_model,
         kpar_bins_theory=np.ones(40) * (1 / un.Mpc),
@@ -51,11 +51,11 @@ def test_uvpread_non_averaged():
     # read data file into UVData object
     uvd = UVData()
     uvd.read_uvh5(datafile)
-    beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
     uvb = hp.pspecbeam.PSpecBeamUV(beamfile, cosmo=None)
-    Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol="xx")
+    jy_to_mk = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol="xx")
     # reshape to appropriately match a UVData.data_array object and multiply in!
-    uvd.data_array *= Jy_to_mK[None, None, :, None]
+    uvd.data_array *= jy_to_mk[None, None, :, None]
     # Create a new PSpecData object, and don't forget to feed the beam object
     ds = hp.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
     # choose baselines
@@ -76,7 +76,7 @@ def test_uvpread_non_averaged():
     uvp2.cosmo = uvp1.cosmo
     dmi2 = DataModelInterface.from_uvpspec(
         uvp2,
-        band_index=0,
+        spw=0,
         theory_model=dummy_theory_model,
         sys_model=dummy_sys_model,
         kpar_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
