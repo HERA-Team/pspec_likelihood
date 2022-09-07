@@ -305,6 +305,8 @@ class DataModelInterface:
                 "passing to DataModelInterface.from_uvpspec"
             )
 
+        use_littleh = "h^-3" in uvp.units
+
         spw_frequencies = uvp.get_spw_ranges()[spw][:2]
         redshift = uvp.cosmo.f2z(np.mean(spw_frequencies))
         # Get wavenumbers parallel to line of sight
@@ -389,12 +391,26 @@ class DataModelInterface:
 
         # Window functions -- same deal as with the covariance. Block diagonal
         # matrix where each block is the k_par window function for one k_perp.
+        if uvp.exact_windows:
+            # If theory is in spherical space but the exact window functions
+            # are not, need to spherically average them
+            kperp_bins_theory = uvp.window_function_kperp[spw][:, polpair_index]
+            kpar_bins_theory = uvp.window_function_kpara[spw][:, polpair_index]
+            # if theory_uses_spherical_k and not spherically_averaged:
+            wf_3d = uvp.window_function_array[spw][..., polpair_index]
+            wf_3d = wf_3d.reshape(
+                (
+                    n_perp,
+                    n_para,
+                    kperp_bins_theory.size * kpar_bins_theory.size,
+                ),
+                order="C",
+            )
+
         wf_3d = np.array([uvp.get_window_function(k)[0] for k in keys])
         assert np.shape(wf_3d) == (n_perp, n_para, n_para)
         window_function = block_diag(*wf_3d)
         assert np.shape(window_function) == (n_perp * n_para, n_perp * n_para)
-
-        use_littleh = "h^-3" in uvp.units
 
         if not isinstance(kpar_bins_obs, un.Quantity):
             unit = cu.littleh / un.Mpc if use_littleh else un.Mpc**-1
