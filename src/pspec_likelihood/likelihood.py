@@ -114,7 +114,9 @@ class DataModelInterface:
         validator=vld_unit(un.mK**2), eq=tp.cmp_array
     )
     window_function: np.ndarray = attr.ib(eq=tp.cmp_array, converter=np.array)
-    covariance: tp.CovarianceType = attr.ib(validator=vld_unit(un.mK**4))
+    covariance: tp.CovarianceType = attr.ib(
+        validator=vld_unit(un.mK**4), eq=tp.cmp_array
+    )
     theory_model: Callable = attr.ib(validator=attr.validators.is_callable())
     sys_model: Callable | None = attr.ib(
         default=None, validator=attr.validators.optional(attr.validators.is_callable())
@@ -123,12 +125,12 @@ class DataModelInterface:
     cosmology: csm.FLRW = attr.ib(
         csm.Planck18, validator=attr.validators.instance_of(csm.FLRW)
     )
-    kpar_bins_obs: tp.Wavenumber = attr.ib()
-    kperp_bins_obs: tp.Wavenumber | None = attr.ib(None)
-    kpar_bins_theory: tp.Wavenumber = attr.ib()
+    kpar_bins_obs: tp.Wavenumber = attr.ib(eq=tp.cmp_array)
+    kperp_bins_obs: tp.Wavenumber | None = attr.ib(None, eq=tp.cmp_array)
+    kpar_bins_theory: tp.Wavenumber = attr.ib(eq=tp.cmp_array)
     kperp_bins_theory: tp.Wavenumber | None = attr.ib()
     kperp_widths_theory: tp.Wavenumber | None = attr.ib(None)
-    kpar_widths_theory: tp.Wavenumber | None = attr.ib(None)
+    kpar_widths_theory: tp.Wavenumber | None = attr.ib(None, eq=tp.cmp_array)
 
     window_integration_rule: Literal["midpoint", "trapz", "quad"] = attr.ib(
         "midpoint", validator=attr.validators.in_(("midpoint", "trapz", "quad"))
@@ -182,7 +184,8 @@ class DataModelInterface:
     @window_integration_rule.validator
     def _wir_vld(self, att, val):
         if val != "midpoint" and (
-            self.kperp_widths_theory is None or self.kpar_widths_theory is None
+            (self.kperp_widths_theory is None and self.kperp_bins_theory is not None)
+            or self.kpar_widths_theory is None
         ):
             raise ValueError(
                 f"if window_integration_rule={val}, kpar/kperp widths are required."
@@ -224,46 +227,6 @@ class DataModelInterface:
     def kperp_centres(self) -> tp.Wavenumber:
         """Centres of the kperp bins."""
         return (self.kperp_bins_obs[1:] + self.kperp_bins_obs[:-1]) / 2
-
-    @classmethod
-    def uvpspec_from_h5_files(
-        cls,
-        band_index: int = 0,
-        field: str | None = None,
-        datapath_format: str | None = None,
-        band_name_in_path_string: bool = False,
-    ):
-        r"""Read UVPSpec object from specified h5 file.
-
-        Parameters
-        ----------
-        band_index
-            Which band (0-indexed) to read, if the file contains multiple
-            bands. Optional if not band_name_in_path_string.
-
-        field
-            Which field to read (determines file name).
-
-        datapath_format
-            File name format for h5 files. For example public IDR2 data
-            uses 'pspec_h1c_idr2_field{}.h5'.
-
-        band_name_in_path_string
-            Whether `datapath_format` needs the band as a second number to
-            format the path (e.g. data sets where every band is its own file).
-
-        Returns
-        -------
-        uvp
-            Opened UVPSpec object.
-        """
-        uvp = hp.UVPSpec()
-        if band_name_in_path_string:
-            band_name = str(band_index + 1)
-            uvp.read_hdf5(datapath_format.format(field, band_name))
-        else:
-            uvp.read_hdf5(datapath_format.format(field))
-        return uvp
 
     @classmethod
     def from_uvpspec(
@@ -442,13 +405,15 @@ class DataModelInterface:
             errors = None
         elif self.window_integration_rule == "trapz":
             lower = model(z, k - kwidth / 2, params)
-            upper = model(z, k + kwidth / 2, z, params)
+            upper = model(z, k + kwidth / 2, params)
             results = (lower + upper) / 2
             errors = (lower - upper) / 2
         elif self.window_integration_rule == "quad":
 
             def pk_func(k):
-                return model(z, k, params)
+                return model(z, k, params).value
+
+            unit = getattr(model(z, k[0], params), "unit", None)
 
             results = []
             errors = []
@@ -456,6 +421,13 @@ class DataModelInterface:
                 result, error = quad(pk_func, center - width / 2, center + width / 2)
                 results.append(result / width)
                 errors.append(error / width)
+
+            results = np.array(results)
+            errors = np.array(errors)
+
+            if unit is not None:
+                results <<= unit
+                errors <<= unit
 
         return results, errors
 
@@ -521,10 +493,13 @@ class DataModelInterface:
                     self._kconvert(self.kpar_bins_theory),
                 )
         else:
-            k = (
-                self._kconvert(self.kperp_bins_obs),
-                self._kconvert(self.kpar_bins_obs),
-            )
+            if self.kperp_bins_obs is None:
+                k = self._kconvert(self.spherical_kbins_obs)
+            else:
+                k = (
+                    self._kconvert(self.kperp_bins_obs),
+                    self._kconvert(self.kpar_bins_obs),
+                )
         kwidth = 0  # TODO: need to do this correctly.
 
         sys_params = self._validate_params(sys_params, self.sys_param_names)
@@ -659,7 +634,7 @@ class PSpecLikelihood(ABC):
         mask = self.variance != 0 * un.mK**4
         if np.any(~mask):
             warnings.warn(
-                f"Warning: Ignoring data in positions {np.where(~mask)} "
+                f"Ignoring data in positions {np.where(~mask)} "
                 "as the variance is zero"
             )
         return mask
@@ -719,7 +694,7 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         mask = self.variance != 0 * un.mK**4
         if np.any(~mask):
             warnings.warn(
-                f"Warning: Ignoring data in positions {np.where(~mask)} "
+                f"Ignoring data in positions {np.where(~mask)} "
                 "as the variance is zero"
             )
         return mask
