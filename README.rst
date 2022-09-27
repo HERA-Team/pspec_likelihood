@@ -43,8 +43,28 @@ Quickstart
 ----------
 Import like this::
 
-    from pspec_likelihood import PSpecLikelihood
+    from pspec_likelihood import DataModelInterface, Gaussian
 
+To construct a likelihood, you first need to construct the ``DataModelInterface``,
+for which you will specify the data, its covariance, a window function,
+and a model both for the theory and the systematics. This class contains all the methods
+required to compute the model/systematics and transform it consistently to data-space.
+
+Secondly, you need to construct a ``PSpecLikelihood``, via one of its concrete sub-classes.
+Examples of such subclasses are ``Gaussian`` and ``GaussianLinearSystematics``. The
+reason these are their own class, instead of being part of the ``DataModelInterface``,
+is for the sake of modularity and extensibility. This allows different actual likelihoods
+to be computed given the data, and new likelihoods to be implemented with ease.
+The basic requirement of a ``PSpecLikelihood`` subclass is that it must implement the
+``loglike(theory_params, sys_params)`` method, which goes and computes the actual
+log-likelihood given a set of parameters. It has access to the ``DataModelInterface``
+object through its ``model`` attribute. So, eg.::
+
+    likelihood = Gaussian(
+        model = DataModelInterface(...)
+    )
+
+    likelihood.loglike(theory_params, sys_params)
 
 Versioning
 ----------
