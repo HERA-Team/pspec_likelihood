@@ -3,8 +3,8 @@
 
 def test_null():
     """Really just a placeholder so that the import is triggered."""
-    from pspec_likelihood import PSpecLikelihood
+    from pspec_likelihood import DataModelInterface
 
-    assert callable(PSpecLikelihood)
+    assert callable(DataModelInterface)
 
     assert True

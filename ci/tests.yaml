@@ -11,4 +11,3 @@ dependencies:
   - pytest-cov
   - scipy
   - setuptools_scm
-  - camb
