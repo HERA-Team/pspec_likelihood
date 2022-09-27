@@ -141,10 +141,15 @@ def test_exception_no_time_avg():
 
 def test_warning_not_redundantly_averaged():
     uvp = prepare_uvp_object(redundant_avg=False, spherical_avg=False)
-    DataModelInterface.from_uvpspec(
-        uvp=uvp, spw=0, theory_model=dummy_theory_model, theory_uses_spherical_k=True
-    )
-    # Todo: How to catch the warning?
+    with pytest.warns(
+        UserWarning, match="The UVPSpec object is not redundantly averaged."
+    ):
+        DataModelInterface.from_uvpspec(
+            uvp=uvp,
+            spw=0,
+            theory_model=dummy_theory_model,
+            theory_uses_spherical_k=True,
+        )
 
 
 def test_exception_no_units():
@@ -174,26 +179,22 @@ def test_exception_no_units():
         store_cov=True,
         verbose=False,
     )
-    with pytest.raises(ValueError) as e:
-        DataModelInterface.from_uvpspec(
-            uvp,
-            spw=0,
-            theory_model=dummy_theory_model,
-            sys_model=dummy_sys_model,
-            kpar_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-            kperp_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-            kpar_widths_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-            kperp_widths_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-        )
-        print(e)
-        assert str(e.value) == "Power Spectrum must be in mK^2 units."
+    with pytest.raises(ValueError, match=r"Power Spectrum must be in"):
+        with pytest.warns(UserWarning, match="Converting to Delta^2 in place..."):
+            DataModelInterface.from_uvpspec(
+                uvp,
+                spw=0,
+                theory_model=dummy_theory_model,
+                sys_model=dummy_sys_model,
+                kpar_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
+                kperp_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
+                kpar_widths_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
+                kperp_widths_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
+            )
 
 
-def test_IDR2_file():  # noqa: N802
+def test_IDR2_file(uvp1):  # noqa: N802
     """Load from tests/data/pspec_h1c_idr2_field{}.h5"""
-    uvp1 = DataModelInterface.uvpspec_from_h5_files(
-        field="1", datapath_format="./tests/data/pspec_h1c_idr2_field{}.h5"
-    )
     dmi1 = DataModelInterface.from_uvpspec(
         uvp1,
         spw=1,
