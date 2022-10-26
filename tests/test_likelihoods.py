@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import astropy.units as un
+import attr
 import numpy as np
 import pytest
 from astropy import cosmology
-import astropy.cosmology.units as cu
+from astropy.cosmology import Planck18
 
 from pspec_likelihood import (
     DataModelInterface,
@@ -19,9 +20,18 @@ def powerlaw_eor_spherical(z: float, k: np.ndarray, params: list[float]) -> np.n
     return k**3 / (2 * np.pi**2) * amplitude * un.mK**2 * (1.0 + z) / k**index
 
 
-def powerlaw_eor_spherical_littleh(z: float, k: np.ndarray, params: list[float]) -> np.ndarray:
+def powerlaw_eor_spherical_littleh(
+    z: float, k: np.ndarray, params: list[float]
+) -> np.ndarray:
     amplitude, index = params
-    return (k/cu.littleh)**3 / (2 * np.pi**2) * amplitude * un.mK**2 * (1.0 + z) / (k/cu.littleh)**index
+    return (
+        (k * Planck18.h) ** 3
+        / (2 * np.pi**2)
+        * amplitude
+        * un.mK**2
+        * (1.0 + z)
+        / (k * Planck18.h) ** index
+    )
 
 
 def powerlaw_eor_cylindrical(
@@ -32,11 +42,9 @@ def powerlaw_eor_cylindrical(
     k = np.sqrt(kperp**2 + kpar**2)
     return k**3 / (2 * np.pi**2) * amplitude * un.mK**2 * (1.0 + z) / k**index
 
-def test_like():
+
+def test_like(uvp1):
     """Load from tests/data/pspec_h1c_idr2_field{}.h5"""
-    uvp1 = DataModelInterface.uvpspec_from_h5_files(
-        field="1", datapath_format="./tests/data/pspec_h1c_idr2_field{}.h5"
-    )
     dmi1 = DataModelInterface.from_uvpspec(
         uvp1,
         spw=1,
@@ -54,8 +62,12 @@ def test_like():
     lk_zeroed = MarginalizedLinearPositiveSystematics(
         model=dmi1, set_negative_to_zero=True
     )
-    result_normal = lk_normal.loglike([0, -0.1], [])
-    result_zeroed = lk_zeroed.loglike([0, -0.1], [])
+    with pytest.warns(UserWarning, match="Ignoring data in positions"):
+        result_normal = lk_normal.loglike([0, -0.1], [])
+
+    with pytest.warns(UserWarning, match="Ignoring data in positions"):
+        result_zeroed = lk_zeroed.loglike([0, -0.1], [])
+
     assert np.allclose(result_normal, -30.61810682, rtol=0, atol=1e-6), (
         "Wrong test IDR2 likelihood result",
         result_normal,
@@ -67,13 +79,10 @@ def test_like():
     return result_normal, lk_zeroed
 
 
-def test_little_h():
+def test_little_h(uvp1):
     """Load from tests/data/pspec_h1c_idr2_field{}.h5"""
-    uvp = DataModelInterface.uvpspec_from_h5_files(
-        field="1", datapath_format="./tests/data/pspec_h1c_idr2_field{}.h5"
-    )
     dmi1 = DataModelInterface.from_uvpspec(
-        uvp,
+        uvp1,
         spw=1,
         theory_model=powerlaw_eor_spherical,
         theory_uses_little_h=False,
@@ -85,7 +94,7 @@ def test_little_h():
         kperp_widths_theory=None,
     )
     dmi2 = DataModelInterface.from_uvpspec(
-        uvp,
+        uvp1,
         spw=1,
         theory_model=powerlaw_eor_spherical_littleh,
         theory_uses_little_h=True,
@@ -97,18 +106,24 @@ def test_little_h():
         kperp_widths_theory=None,
     )
 
+    with pytest.warns(UserWarning, match="Your covariance matrix is not diagonal"):
+        lk_no_littleh = MarginalizedLinearPositiveSystematics(
+            model=dmi1, set_negative_to_zero=False
+        )
+    with pytest.warns(UserWarning, match="Your covariance matrix is not diagonal"):
+        lk_with_littleh = MarginalizedLinearPositiveSystematics(
+            model=dmi2, set_negative_to_zero=False
+        )
 
-    lk_no_littleh = MarginalizedLinearPositiveSystematics(
-        model=dmi1, set_negative_to_zero=False
+    assert np.isclose(
+        lk_no_littleh.loglike([1000.0, 2.1], []),
+        lk_with_littleh.loglike([1000.0, 2.1], []),
+        rtol=1e-3,
     )
-    lk_with_littleh = MarginalizedLinearPositiveSystematics(
-        model=dmi1, set_negative_to_zero=False
-    )
-    assert np.all(lk_no_littleh==lk_with_littleh)
-    return lk_with_littleh
 
 
-#theory_uses_little_h is False by default
+# theory_uses_little_h is False by default
+
 
 @pytest.fixture(scope="session")
 def dmi_spherical():
@@ -227,3 +242,84 @@ def test_posterior_mlp(request, dmi):
     # For the MLPS, getting smaller and smaller amplitude gives bigger posterior,
     # since it's "more certain" to be allowed under the upper limit
     assert np.all(np.diff(likes) <= 0)
+
+
+def test_different_discretization(dmi_spherical):
+    bin_widths = dmi_spherical.kpar_bins_obs[1:] - dmi_spherical.kpar_bins_obs[:-1]
+    bin_widths = np.concatenate(([bin_widths[0]], bin_widths))
+    dmi_trapz = attr.evolve(
+        dmi_spherical, window_integration_rule="trapz", kpar_widths_theory=bin_widths
+    )
+
+    dmi_quad = attr.evolve(
+        dmi_spherical, window_integration_rule="quad", kpar_widths_theory=bin_widths
+    )
+
+    centre = dmi_spherical.compute_model([5.0, 2.7], [])
+    trapz = dmi_trapz.compute_model([5.0, 2.7], [])
+    quad = dmi_quad.compute_model([5.0, 2.7], [])
+
+    assert np.allclose(centre, trapz, atol=1e-2)
+    assert np.allclose(centre, quad, atol=1e-2)
+
+
+def constant_offset_systematic(z: float, k: np.ndarray, params: list[float]):
+    return params[0] * np.ones(len(k)) * un.mK**2
+
+
+def test_with_sys_model(dmi_spherical):
+    new_dmi = attr.evolve(dmi_spherical, sys_model=constant_offset_systematic)
+
+    assert np.array_equal(
+        new_dmi.compute_model([5.0, 2.7], [0]),
+        dmi_spherical.compute_model([5.0, 2.7], []),
+    )
+
+    assert not np.array_equal(
+        new_dmi.compute_model([5.0, 2.7], [1.0]),
+        dmi_spherical.compute_model([5.0, 2.7], []),
+    )
+
+
+def test_with_sys_model_not_apply_window(dmi_spherical):
+    new_dmi = attr.evolve(
+        dmi_spherical,
+        sys_model=constant_offset_systematic,
+        apply_window_to_systematics=False,
+    )
+
+    assert np.array_equal(
+        new_dmi.compute_model([5.0, 2.7], [0]),
+        dmi_spherical.compute_model([5.0, 2.7], []),
+    )
+
+    assert not np.array_equal(
+        new_dmi.compute_model([5.0, 2.7], [1.0]),
+        dmi_spherical.compute_model([5.0, 2.7], []),
+    )
+
+
+def powerlaw_eor_spherical_dictparams(
+    z: float, k: np.ndarray, params: dict[str, float]
+) -> np.ndarray:
+    return (
+        k**3
+        / (2 * np.pi**2)
+        * params["amplitude"]
+        * un.mK**2
+        * (1.0 + z)
+        / k ** params["index"]
+    )
+
+
+def test_with_paramnames(dmi_spherical):
+    dmi_names = attr.evolve(
+        dmi_spherical,
+        theory_param_names=["amplitude", "index"],
+        theory_model=powerlaw_eor_spherical_dictparams,
+    )
+
+    assert np.array_equal(
+        dmi_names.compute_model({"amplitude": 5.0, "index": 2.7}, []),
+        dmi_spherical.compute_model([5.0, 2.7], []),
+    )
