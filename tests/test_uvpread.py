@@ -26,6 +26,7 @@ def prepare_uvp_object(
     time_avg=True,
     spherical_avg=True,
     redundant_avg=True,
+    exact_wf=False,
 ):
     # Based on https://github.com/HERA-Team/pspec_likelihood/blob/api_idr2like/
     # dvlpt/tests_data_file.ipynb
@@ -83,6 +84,21 @@ def prepare_uvp_object(
         blpair_groups,
     )
     print("Data array shape with these only", uvp.data_array[0].shape)
+    if exact_wf:
+        # obtain exact window functions for Gaussian beam
+        s, i = -3.431e-02, 1.130e01
+        bw = np.linspace(1, 2, 1024, endpoint=False) * 1e8
+        gaussian_beam = hp.FTBeam.gaussian(
+            freq_array=bw[:205],
+            widths=s * bw[:205] / 1e6 + i,
+            pol="pI",
+            mapsize=1.0,
+            npix=301,
+            cosmo=uvp.cosmo,
+        )
+        uvp.get_exact_window_functions(
+            ftbeam=gaussian_beam, inplace=True, verbose=False
+        )
     # perform redundant average
     if redundant_avg:
         uvp.average_spectra(blpair_groups=blpair_groups)
@@ -118,6 +134,19 @@ def test_cylindrical_ps():
     assert np.shape(dmi.covariance) == (40, 40)  # right shape
     assert np.shape(dmi.kpar_bins_obs) == (40,)  # right shape
     assert np.shape(dmi.kperp_bins_obs) == (40,)  # right shape
+    return dmi
+
+
+def test_exact_wf():
+    uvp = prepare_uvp_object(spherical_avg=False, exact_wf=True)
+    dmi = DataModelInterface.from_uvpspec(
+        uvp=uvp, spw=0, theory_model=dummy_theory_model, theory_uses_spherical_k=True
+    )
+    assert np.shape(dmi.covariance) == (40, 40)  # right shape
+    assert np.shape(dmi.kpar_bins_obs) == (40,)  # right shape
+    assert np.shape(dmi.kperp_bins_obs) == (40,)  # right shape
+    print(dmi.kpar_bins_obs.shape, dmi.window_function.shape)
+    assert np.shape(dmi.kpar_bins_obs) != np.shape(dmi.kpar_bins_theory)  #
     return dmi
 
 

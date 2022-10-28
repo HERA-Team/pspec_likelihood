@@ -112,11 +112,11 @@ class DataModelInterface:
 
     redshift: float = attr.ib(converter=float)
     power_spectrum: tp.PowerType = attr.ib(
-        validator=vld_unit(un.mK ** 2), eq=tp.cmp_array
+        validator=vld_unit(un.mK**2), eq=tp.cmp_array
     )
     window_function: np.ndarray = attr.ib(eq=tp.cmp_array, converter=np.array)
     covariance: tp.CovarianceType = attr.ib(
-        validator=vld_unit(un.mK ** 4), eq=tp.cmp_array
+        validator=vld_unit(un.mK**4), eq=tp.cmp_array
     )
     theory_model: Callable = attr.ib(validator=attr.validators.is_callable())
     sys_model: Callable | None = attr.ib(
@@ -212,7 +212,7 @@ class DataModelInterface:
     def spherical_kbins_obs(self) -> tp.Wavenumber:
         """The spherical k bins of the observation (the edges)."""
         if self.kperp_bins_obs is not None:
-            return np.sqrt(self.kpar_bins_obs ** 2 + self.kperp_bins_obs ** 2)
+            return np.sqrt(self.kpar_bins_obs**2 + self.kperp_bins_obs**2)
         else:
             return self.kpar_bins_obs
 
@@ -220,7 +220,7 @@ class DataModelInterface:
     def spherical_kbins_theory(self) -> tp.Wavenumber:
         """The spherical k bins of the theory (edges)."""
         if self.kperp_bins_theory is not None:
-            return np.sqrt(self.kpar_bins_theory ** 2 + self.kperp_bins_theory ** 2)
+            return np.sqrt(self.kpar_bins_theory**2 + self.kperp_bins_theory**2)
         else:
             return self.kpar_bins_theory
 
@@ -374,7 +374,11 @@ class DataModelInterface:
             kperps_wf = uvp.window_function_kperp[spw][:, polpair_index]
             kparas_wf = uvp.window_function_kpara[spw][:, polpair_index]
             window_function = wf_3d.reshape(
-                (n_perp * n_para, kperps_wf.size * kparas_wf.size,), order="C",
+                (
+                    n_perp * n_para,
+                    kperps_wf.size * kparas_wf.size,
+                ),
+                order="C",
             )
             # Overwrite potential input k_bins_theory
             warnings.warn(
@@ -407,7 +411,9 @@ class DataModelInterface:
 
         if hasattr(uvp, "cosmo"):
             cosmo = csm.LambdaCDM(
-                H0=uvp.cosmo.H0, Om0=uvp.cosmo.Om_M, Ode0=uvp.cosmo.Om_L,
+                H0=uvp.cosmo.H0,
+                Om0=uvp.cosmo.Om_M,
+                Ode0=uvp.cosmo.Om_L,
             )
         else:
             cosmo = csm.Planck18
@@ -419,8 +425,8 @@ class DataModelInterface:
             kpar_bins_obs=kpar_bins_obs,
             kperp_bins_theory=kperp_bins_theory,
             kpar_bins_theory=kpar_bins_theory,
-            power_spectrum=power_spectrum << un.mK ** 2,
-            covariance=covariance << un.mK ** 4,
+            power_spectrum=power_spectrum << un.mK**2,
+            covariance=covariance << un.mK**4,
             window_function=window_function,
             cosmology=cosmo,
             **kwargs,
@@ -671,7 +677,7 @@ class PSpecLikelihood(ABC):
     @cached_property
     def data_mask(self):
         """A mask where data is properly defined and usable."""
-        mask = self.variance != 0 * un.mK ** 4
+        mask = self.variance != 0 * un.mK**4
         if np.any(~mask):
             warnings.warn(
                 f"Ignoring data in positions {np.where(~mask)} "
@@ -731,7 +737,7 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
     @cached_property
     def data_mask(self):
         """A mask where data is properly defined and usable."""
-        mask = self.variance != 0 * un.mK ** 4
+        mask = self.variance != 0 * un.mK**4
         if np.any(~mask):
             warnings.warn(
                 f"Ignoring data in positions {np.where(~mask)} "
@@ -762,7 +768,7 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         log2 = np.log(2)
         log1perf = np.where(
             residuals_over_errors < 25,
-            np.log(erfcx(-residuals_over_errors)) - residuals_over_errors ** 2,
+            np.log(erfcx(-residuals_over_errors)) - residuals_over_errors**2,
             log2,
         )
 
