@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import warnings
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from typing import Callable, Literal, Sequence
 
 import astropy.cosmology as csm
@@ -111,11 +112,11 @@ class DataModelInterface:
 
     redshift: float = attr.ib(converter=float)
     power_spectrum: tp.PowerType = attr.ib(
-        validator=vld_unit(un.mK**2), eq=tp.cmp_array
+        validator=vld_unit(un.mK ** 2), eq=tp.cmp_array
     )
     window_function: np.ndarray = attr.ib(eq=tp.cmp_array, converter=np.array)
     covariance: tp.CovarianceType = attr.ib(
-        validator=vld_unit(un.mK**4), eq=tp.cmp_array
+        validator=vld_unit(un.mK ** 4), eq=tp.cmp_array
     )
     theory_model: Callable = attr.ib(validator=attr.validators.is_callable())
     sys_model: Callable | None = attr.ib(
@@ -148,7 +149,7 @@ class DataModelInterface:
     apply_window_to_systematics: bool = attr.ib(True, converter=bool)
 
     @kpar_bins_obs.validator
-    @kpar_bins_theory.validator
+    # @kpar_bins_theory.validator
     def _k_validator(self, att, val):
         if not np.isrealobj(val):
             raise TypeError(f"{att.name} must be real!")
@@ -161,7 +162,7 @@ class DataModelInterface:
             raise ValueError(f"{att.name} must have same shape as the power spectrum")
 
     @kperp_bins_obs.validator
-    @kperp_bins_theory.validator
+    # @kperp_bins_theory.validator
     @kpar_widths_theory.validator
     @kperp_widths_theory.validator
     def _opt_k_vld(self, att, val):
@@ -179,7 +180,15 @@ class DataModelInterface:
     @window_function.validator
     def _wf_vld(self, att, val):
         if val.shape not in [(len(self.power_spectrum), len(self.power_spectrum))]:
-            raise ValueError("window_function must be  Nk * Nk matrix")
+            try:
+                self.kpar_bins_theory
+            except AttributeError:
+                raise ValueError("window_function must be  Nk * Nk matrix")
+            else:
+                if val.shape not in [
+                    (len(self.power_spectrum), len(self.kpar_bins_theory))
+                ]:
+                    raise ValueError("window_function must be  Nk_obs * Nk_th matrix")
 
     @window_integration_rule.validator
     def _wir_vld(self, att, val):
@@ -203,7 +212,7 @@ class DataModelInterface:
     def spherical_kbins_obs(self) -> tp.Wavenumber:
         """The spherical k bins of the observation (the edges)."""
         if self.kperp_bins_obs is not None:
-            return np.sqrt(self.kpar_bins_obs**2 + self.kperp_bins_obs**2)
+            return np.sqrt(self.kpar_bins_obs ** 2 + self.kperp_bins_obs ** 2)
         else:
             return self.kpar_bins_obs
 
@@ -211,7 +220,7 @@ class DataModelInterface:
     def spherical_kbins_theory(self) -> tp.Wavenumber:
         """The spherical k bins of the theory (edges)."""
         if self.kperp_bins_theory is not None:
-            return np.sqrt(self.kpar_bins_theory**2 + self.kperp_bins_theory**2)
+            return np.sqrt(self.kpar_bins_theory ** 2 + self.kperp_bins_theory ** 2)
         else:
             return self.kpar_bins_theory
 
@@ -235,6 +244,8 @@ class DataModelInterface:
         spw: int = 0,
         polpair_index: int = 0,
         theory_uses_spherical_k: bool = False,
+        kpar_bins_theory: tp.Wavenumber | None = None,
+        kperp_bins_theory: tp.Wavenumber | None = None,
         **kwargs,
     ) -> DataModelInterface:
         r"""Extract parameters from UVPSpec object.
@@ -352,10 +363,34 @@ class DataModelInterface:
 
         # Window functions -- same deal as with the covariance. Block diagonal
         # matrix where each block is the k_par window function for one k_perp.
-        wf_3d = np.array([uvp.get_window_function(k)[0] for k in keys])
-        assert np.shape(wf_3d) == (n_perp, n_para, n_para)
-        window_function = block_diag(*wf_3d)
-        assert np.shape(window_function) == (n_perp * n_para, n_perp * n_para)
+        try:
+            wf_3d = np.array([uvp.get_window_function(k)[0] for k in keys])
+        except AttributeError as e:
+            raise AttributeError(
+                "Window functions are not defined on the UVPspec object"
+            ) from e
+        if uvp.exact_windows and not spherically_averaged:
+            # Extract exact window functions from UVPSpec object
+            kperps_wf = uvp.window_function_kperp[spw][:, polpair_index]
+            kparas_wf = uvp.window_function_kpara[spw][:, polpair_index]
+            window_function = wf_3d.reshape(
+                (n_perp * n_para, kperps_wf.size * kparas_wf.size,), order="C",
+            )
+            # Overwrite potential input k_bins_theory
+            warnings.warn(
+                "Using kperp_bins_theory and kpar_bins_theory "
+                "intrinsic to the exact window functions."
+            )
+            kperp_bins_theory = np.repeat(kperps_wf, kparas_wf.size)
+            kpar_bins_theory = np.tile(kparas_wf, kperps_wf.size)
+        else:
+            assert np.shape(wf_3d) == (n_perp, n_para, n_para)
+            window_function = block_diag(*wf_3d)
+            assert np.shape(window_function) == (n_perp * n_para, n_perp * n_para)
+            if kpar_bins_theory is None:
+                kpar_bins_theory = deepcopy(kpar_bins_obs)
+            if kperp_bins_theory is None:
+                kperp_bins_theory = deepcopy(kperp_bins_obs)
 
         use_littleh = "h^-3" in uvp.units
 
@@ -364,12 +399,15 @@ class DataModelInterface:
             kpar_bins_obs <<= unit
             if not spherically_averaged:
                 kperp_bins_obs <<= unit
+        if not isinstance(kpar_bins_theory, un.Quantity):
+            unit = cu.littleh / un.Mpc if use_littleh else un.Mpc**-1
+            kpar_bins_theory <<= unit
+            if not spherically_averaged:
+                kperp_bins_theory <<= unit
 
         if hasattr(uvp, "cosmo"):
             cosmo = csm.LambdaCDM(
-                H0=uvp.cosmo.H0,
-                Om0=uvp.cosmo.Om_M,
-                Ode0=uvp.cosmo.Om_L,
+                H0=uvp.cosmo.H0, Om0=uvp.cosmo.Om_M, Ode0=uvp.cosmo.Om_L,
             )
         else:
             cosmo = csm.Planck18
@@ -379,8 +417,10 @@ class DataModelInterface:
             redshift=redshift,
             kperp_bins_obs=kperp_bins_obs,
             kpar_bins_obs=kpar_bins_obs,
-            power_spectrum=power_spectrum << un.mK**2,
-            covariance=covariance << un.mK**4,
+            kperp_bins_theory=kperp_bins_theory,
+            kpar_bins_theory=kpar_bins_theory,
+            power_spectrum=power_spectrum << un.mK ** 2,
+            covariance=covariance << un.mK ** 4,
             window_function=window_function,
             cosmology=cosmo,
             **kwargs,
@@ -631,7 +671,7 @@ class PSpecLikelihood(ABC):
     @cached_property
     def data_mask(self):
         """A mask where data is properly defined and usable."""
-        mask = self.variance != 0 * un.mK**4
+        mask = self.variance != 0 * un.mK ** 4
         if np.any(~mask):
             warnings.warn(
                 f"Ignoring data in positions {np.where(~mask)} "
@@ -691,7 +731,7 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
     @cached_property
     def data_mask(self):
         """A mask where data is properly defined and usable."""
-        mask = self.variance != 0 * un.mK**4
+        mask = self.variance != 0 * un.mK ** 4
         if np.any(~mask):
             warnings.warn(
                 f"Ignoring data in positions {np.where(~mask)} "
@@ -722,7 +762,7 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         log2 = np.log(2)
         log1perf = np.where(
             residuals_over_errors < 25,
-            np.log(erfcx(-residuals_over_errors)) - residuals_over_errors**2,
+            np.log(erfcx(-residuals_over_errors)) - residuals_over_errors ** 2,
             log2,
         )
 
