@@ -11,6 +11,7 @@ from astropy.cosmology import Planck18
 from pspec_likelihood import (
     DataModelInterface,
     Gaussian,
+    LikelihoodLinearSystematic,
     MarginalizedLinearPositiveSystematics,
 )
 
@@ -244,6 +245,30 @@ def test_posterior_mlp(request, dmi):
     assert np.all(np.diff(likes) <= 0)
 
 
+@pytest.mark.parametrize("dmi", ["dmi_spherical", "dmi_cylsphere", "dmi_cylindrical"])
+def test_max_likelihood_arblinearsystematics(request, dmi):
+    dmi = request.getfixturevalue(dmi)
+    like = LikelihoodLinearSystematic(
+        linear_systematics_basis_function=linear_systematics_basis_function,
+        nlinear=1,
+        model=dmi,
+    )
+
+    amp = np.logspace(4.5, 5.5, 11)
+    likes = np.zeros(len(amp))
+    for i, a in enumerate(amp):
+        likes[i] = like.loglike([a, 2.7], [])
+
+    assert np.argmax(likes) == 5
+
+    indx = np.linspace(2.6, 2.8, 11)
+    likes = np.zeros(len(indx))
+    for i, a in enumerate(indx):
+        likes[i] = like.loglike([1e5, a], [])
+
+    assert np.argmax(likes) == 5
+
+
 def test_different_discretization(dmi_spherical):
     bin_widths = dmi_spherical.kpar_bins_obs[1:] - dmi_spherical.kpar_bins_obs[:-1]
     bin_widths = np.concatenate(([bin_widths[0]], bin_widths))
@@ -323,3 +348,7 @@ def test_with_paramnames(dmi_spherical):
         dmi_names.compute_model({"amplitude": 5.0, "index": 2.7}, []),
         dmi_spherical.compute_model([5.0, 2.7], []),
     )
+
+
+def linear_systematics_basis_function(sys_params, kperp_bins_obs, kpar_bins_obs):
+    return np.ones((len(kpar_bins_obs), 1))
