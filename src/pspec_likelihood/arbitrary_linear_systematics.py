@@ -1,16 +1,19 @@
 """Module responsible for computing the likelihood for linear systematics."""
 from __future__ import annotations
 
+import warnings
+
 import attr
 import numpy as np
+from astropy import units as un
 from cached_property import cached_property
 from numpy import matmul as matrix_multiply
 from numpy.linalg import inv as inverse
 from scipy import stats
-import warnings
-from .likelihood import PSpecLikelihood
-from astropy import units as un
+
 from . import types as tp
+from .likelihood import PSpecLikelihood
+
 
 @attr.s
 class LikelihoodLinearSystematic(PSpecLikelihood):
@@ -39,12 +42,12 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
         Must be a 1D array of length len(linear_systematics). Defaults to None.
         If None, the prior on the linear systematics are assumed to be improper uniform.
     sigma_theta
-        The prior covariance of the linear systematic parameters in the case of a 
+        The prior covariance of the linear systematic parameters in the case of a
         Gaussian prior on the linear systematic parameters. Must be an array of shape
         ``len(linear systematics) X len(linear_systematics)``.
         If None, the prior on the linear systematics is assumed to improper uniform.
     nlinear
-        The number of linear parameters -- not required if ``mu_theta`` or 
+        The number of linear parameters -- not required if ``mu_theta`` or
         ``sigma_theta`` are given.
     cov_tolerance
         Tolerance on the eigenvalues of the covariance to determine if covariance is
@@ -83,12 +86,12 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
     @sigma_theta.validator
     def _sigma_theta_validator(self, att, val):
         if val.ndim != 2:
-            raise ValueError('Covariance must be two dimensional')
+            raise ValueError("Covariance must be two dimensional")
         if val.shape[0] != val.shape[1]:
-            raise ValueError('Covariance must be square')
+            raise ValueError("Covariance must be square")
         lambdas = np.linalg.eigvalsh(val)
         if not np.all(lambdas > -self.cov_tolerance):
-            raise ValueError('Covariance is not invertible')
+            raise ValueError("Covariance is not invertible")
 
     @cached_property
     def sigma_theta_inv(self) -> np.ndarray:
@@ -113,9 +116,13 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
 
         return inverse(self.sigma_theta_inv + a_sigma_a)
 
-    def compute_mu_linear(self, basis: tp.PowerType, sigma_linear: np.ndarray, resid: tp.PowerType) -> np.ndarray:
+    def compute_mu_linear(
+        self, basis: tp.PowerType, sigma_linear: np.ndarray, resid: tp.PowerType
+    ) -> np.ndarray:
         """Computes mu_linear given a basis and sigma_linear."""
-        a_sigma_r = matrix_multiply(basis.T, matrix_multiply(self.covariance_inv, resid))
+        a_sigma_r = matrix_multiply(
+            basis.T, matrix_multiply(self.covariance_inv, resid)
+        )
         if not self.is_improper_uniform:
             a_sigma_r += matrix_multiply(self.sigma_theta_inv, self.mu_theta)
 
@@ -133,12 +140,19 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
             sys_params, self.model.kperp_bins_obs, self.model.kpar_bins_obs
         )
 
-        if not isinstance(a_basis, un.Quantity) or not a_basis.unit.is_equivalent(un.mK**2):
-            raise ValueError("The function linear_systematics_basis_function must return a power-like quantity (in equivalently mK^2)")
-        
+        if not isinstance(a_basis, un.Quantity) or not a_basis.unit.is_equivalent(
+            un.mK**2
+        ):
+            raise ValueError(
+                "The function linear_systematics_basis_function must return a "
+                "power-like quantity (in equivalently mK^2)"
+            )
+
         # The shape of a_basis must match the k bins
         if a_basis.shape != (len(self.model.kpar_bins_obs), self.nlinear):
-            raise ValueError("linear_systematics_basis_function must return a (kbins, nlinear) array")
+            raise ValueError(
+                "linear_systematics_basis_function must return a (kbins, nlinear) array"
+            )
 
         # compute the theoretical model for this set of parameters
         theory_model = self.model.compute_model(theory_params, sys_params)
