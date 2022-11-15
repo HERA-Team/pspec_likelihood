@@ -1,5 +1,6 @@
 """The PSpec Likelihood Package."""
 from . import likelihood
+from .arbitrary_linear_systematics import LikelihoodLinearSystematic
 from .likelihood import (
     DataModelInterface,
     Gaussian,
