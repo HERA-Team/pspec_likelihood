@@ -7,9 +7,10 @@ from cached_property import cached_property
 from numpy import matmul as matrix_multiply
 from numpy.linalg import inv as inverse
 from scipy import stats
-
+import warnings
 from .likelihood import PSpecLikelihood
-
+from astropy import units as un
+from . import types as tp
 
 @attr.s
 class LikelihoodLinearSystematic(PSpecLikelihood):
@@ -33,23 +34,28 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
         ``linear_systematic_basis_function(theta_lin, theta_nonlin, kperp_bins_theory)``
         The output of this function is required to be an ndarray of shape
         ``sys_params['linear'].shape``.
-    sigma_theta
-        The covariance of the linear systematic parameters in the case of a Gaussian
-        prior on the linear systematic parameters. Must be an array of shape
-        ``len(linear systematics) X len(linear_systematics)``.
-        If None, the prior on the linear systematics is assumed to improper uniform.
     mu_theta
         The mean of the Gaussian prior on the linear systematic variables.
         Must be a 1D array of length len(linear_systematics). Defaults to None.
         If None, the prior on the linear systematics are assumed to be improper uniform.
-
+    sigma_theta
+        The prior covariance of the linear systematic parameters in the case of a 
+        Gaussian prior on the linear systematic parameters. Must be an array of shape
+        ``len(linear systematics) X len(linear_systematics)``.
+        If None, the prior on the linear systematics is assumed to improper uniform.
+    nlinear
+        The number of linear parameters -- not required if ``mu_theta`` or 
+        ``sigma_theta`` are given.
+    cov_tolerance
+        Tolerance on the eigenvalues of the covariance to determine if covariance is
+        singular.
     """
 
     linear_systematics_basis_function = attr.ib()
     mu_theta: np.ndarray | None = attr.ib(None)
     nlinear: int = attr.ib()
     sigma_theta: np.ndarray = attr.ib()
-    cov_tolerance: float = 10
+    cov_tolerance: float = attr.ib(default=10, converter=float)
 
     @cached_property
     def covariance_inv(self):
@@ -77,12 +83,12 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
     @sigma_theta.validator
     def _sigma_theta_validator(self, att, val):
         if val.ndim != 2:
-            raise ValueError(f'{"Covariance must be two dimensional"}')
+            raise ValueError('Covariance must be two dimensional')
         if val.shape[0] != val.shape[1]:
-            raise ValueError(f'{"Covariance must be square"}')
+            raise ValueError('Covariance must be square')
         lambdas = np.linalg.eigvalsh(val)
         if not np.all(lambdas > -self.cov_tolerance):
-            raise ValueError(f'{"Covariance is not invertible"}')
+            raise ValueError('Covariance is not invertible')
 
     @cached_property
     def sigma_theta_inv(self) -> np.ndarray:
@@ -99,17 +105,17 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
         """Computes the multivariate normal for loglike."""
         return stats.multivariate_normal(cov=self.model.covariance)
 
-    def compute_sigma_linear(self, basis):
+    def compute_sigma_linear(self, basis: tp.PowerType) -> np.ndarray:
         """Computes sigma_linear given a basis."""
         a_sigma_a = matrix_multiply(
             basis.T, matrix_multiply(self.covariance_inv, basis)
-        )
+        ).to_value("")
 
         return inverse(self.sigma_theta_inv + a_sigma_a)
 
-    def compute_mu_linear(self, basis, sigma_linear, r):
+    def compute_mu_linear(self, basis: tp.PowerType, sigma_linear: np.ndarray, resid: tp.PowerType) -> np.ndarray:
         """Computes mu_linear given a basis and sigma_linear."""
-        a_sigma_r = +matrix_multiply(basis.T, matrix_multiply(self.covariance_inv, r))
+        a_sigma_r = matrix_multiply(basis.T, matrix_multiply(self.covariance_inv, resid))
         if not self.is_improper_uniform:
             a_sigma_r += matrix_multiply(self.sigma_theta_inv, self.mu_theta)
 
@@ -117,28 +123,25 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
 
     def loglike(self, theory_params, sys_params):
         """
-        Linear systematic parameters.
+        Likelihood function for the arbitrary lineary systematics model.
 
-        Right now the systematic variables are ASSUMED to
-        be in the same basis as the k_bins.
+        Details on this derivation can be found in
+        Tauscher et al (2021).
         """
         # this is the linear systematic coefficients - compute at each step
         a_basis = self.linear_systematics_basis_function(
             sys_params, self.model.kperp_bins_obs, self.model.kpar_bins_obs
         )
 
-        # optionally apply window function to the linear systematics matrix here
-
-        """
-        Details on this derivation can be found in
-        Tauscher et al (2021).
-        """
+        if not isinstance(a_basis, un.Quantity) or not a_basis.unit.is_equivalent(un.mK**2):
+            raise ValueError("The function linear_systematics_basis_function must return a power-like quantity (in equivalently mK^2)")
+        
+        # The shape of a_basis must match the k bins
+        if a_basis.shape != (len(self.model.kpar_bins_obs), self.nlinear):
+            raise ValueError("linear_systematics_basis_function must return a (kbins, nlinear) array")
 
         # compute the theoretical model for this set of parameters
         theory_model = self.model.compute_model(theory_params, sys_params)
-
-        # The shape of a_basis must match the k bins
-        assert a_basis.shape == (len(self.model.kpar_bins_obs), self.nlinear)
 
         r = self.power_spectrum - theory_model
 
@@ -158,10 +161,10 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
         loglikelihood = np.sum(self.compute_mn_loglike.logpdf(rprime))
 
         loglikelihood_eff = (
-            0.5 * np.linalg.slogdet(sigma_linear.value)[1] + prior + loglikelihood
+            0.5 * np.linalg.slogdet(sigma_linear)[1] + prior + loglikelihood
         )
 
-        if np.isfinite(loglikelihood_eff) is False:
-            print("Warning: Non definite likelihood")
+        if not np.isfinite(loglikelihood_eff):
+            warnings.warn("Non-finite likelihood")
 
         return loglikelihood_eff

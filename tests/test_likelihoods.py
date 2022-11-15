@@ -268,6 +268,91 @@ def test_max_likelihood_arblinearsystematics(request, dmi):
 
     assert np.argmax(likes) == 5
 
+@pytest.mark.parametrize("dmi", ["dmi_spherical", "dmi_cylsphere", "dmi_cylindrical"])
+def test_arblin_gauss_vs_uniform(request, dmi):
+    dmi = request.getfixturevalue(dmi)
+
+    like_unif = LikelihoodLinearSystematic(
+        linear_systematics_basis_function=linear_systematics_basis_function,
+        nlinear=1, 
+        model=dmi,
+    )
+    lu = like_unif.loglike([4.5, 2.7], [])
+
+    lg = []
+    for i, sigma in enumerate([1e3, 1e4, 1e5, 1e6]):
+        like_gauss = LikelihoodLinearSystematic(
+            linear_systematics_basis_function=linear_systematics_basis_function,
+            mu_theta=np.array([0]),
+            sigma_theta=np.array([[sigma]]), 
+            model=dmi,
+        )
+        lg.append(like_gauss.loglike([4.5, 2.7], []))
+
+        if i:
+            assert np.abs(lu - lg[i]) <= np.abs(lu - lg[i-1])
+
+def test_arblin_bad_inputs(dmi_spherical):
+    with pytest.raises(ValueError, match='You need to provide nlinear'):
+        LikelihoodLinearSystematic(
+            linear_systematics_basis_function=linear_systematics_basis_function,
+            model=dmi_spherical
+        )
+
+    with pytest.raises(ValueError, match='Provide sigma_theta'):
+        LikelihoodLinearSystematic(
+            linear_systematics_basis_function=linear_systematics_basis_function,
+            mu_theta=np.array([0]),
+            model=dmi_spherical
+        )
+    with pytest.raises(ValueError, match='Covariance must be two dimensional'):
+        LikelihoodLinearSystematic(
+                linear_systematics_basis_function=linear_systematics_basis_function,
+                sigma_theta = np.array([1]),
+                mu_theta=np.array([0]),
+                model=dmi_spherical
+            )
+
+    with pytest.raises(ValueError, match='Covariance must be square'):
+        LikelihoodLinearSystematic(
+                linear_systematics_basis_function=linear_systematics_basis_function,
+                sigma_theta=np.array([[1,1]]),
+                mu_theta=np.array([0]),
+                model=dmi_spherical
+            )
+
+    with pytest.raises(ValueError, match='Covariance is not invertible'):
+        LikelihoodLinearSystematic(
+                linear_systematics_basis_function=linear_systematics_basis_function,
+                sigma_theta=np.array([[0]]),
+                mu_theta=np.array([0]),
+                model=dmi_spherical,
+                cov_tolerance=0,
+            )
+
+    def bad_sys_function(sys_params, kperp_bins_obs, kpar_bins_obs):
+        return np.ones((len(kpar_bins_obs), 1))
+
+    lk = LikelihoodLinearSystematic(
+        linear_systematics_basis_function=bad_sys_function,
+        nlinear=1,
+        model=dmi_spherical
+    )
+
+    with pytest.raises(ValueError, match='must return a power-like quantity'):
+        lk.loglike([4, 2.7], [])
+
+    def bad_sys_function(sys_params, kperp_bins_obs, kpar_bins_obs):
+        return np.ones((len(kpar_bins_obs) + 1, 1)) << un.mK**2
+
+    lk = LikelihoodLinearSystematic(
+        linear_systematics_basis_function=bad_sys_function,
+        nlinear=1,
+        model=dmi_spherical
+    )
+
+    with pytest.raises(ValueError, match='must return a '):
+        lk.loglike([4, 2.7], [])
 
 def test_different_discretization(dmi_spherical):
     bin_widths = dmi_spherical.kpar_bins_obs[1:] - dmi_spherical.kpar_bins_obs[:-1]
@@ -351,4 +436,4 @@ def test_with_paramnames(dmi_spherical):
 
 
 def linear_systematics_basis_function(sys_params, kperp_bins_obs, kpar_bins_obs):
-    return np.ones((len(kpar_bins_obs), 1))
+    return np.ones((len(kpar_bins_obs), 1)) << un.mK**2
