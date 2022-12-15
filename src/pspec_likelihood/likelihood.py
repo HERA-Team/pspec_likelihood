@@ -189,6 +189,14 @@ class DataModelInterface:
                     (len(self.power_spectrum), len(self.kpar_bins_theory))
                 ]:
                     raise ValueError("window_function must be  Nk_obs * Nk_th matrix")
+                else:
+                    # check nornalisation of cylindrical window functions
+                    sum_per_bin = np.sum(val, axis=1)[:, None]
+                    if not np.allclose(sum_per_bin[sum_per_bin != 0.0], 1.0):
+                        warnings.warn(
+                            "window_function not normalised... normalising inplace."
+                        )
+                        val = np.divide(val, sum_per_bin, where=sum_per_bin != 0)
 
     @window_integration_rule.validator
     def _wir_vld(self, att, val):
