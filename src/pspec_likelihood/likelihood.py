@@ -707,6 +707,7 @@ class Gaussian(PSpecLikelihood):
         normal = multivariate_normal(
             mean=self.power_spectrum[self.data_mask],
             cov=self.model.covariance[self.data_mask][:, self.data_mask],
+            allow_singular=True,
         )
         return normal.logpdf(model[self.data_mask])
 
