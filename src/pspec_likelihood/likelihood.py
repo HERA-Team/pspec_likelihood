@@ -179,24 +179,19 @@ class DataModelInterface:
 
     @window_function.validator
     def _wf_vld(self, att, val):
-        if val.shape not in [(len(self.power_spectrum), len(self.power_spectrum))]:
-            try:
-                self.kpar_bins_theory
-            except AttributeError:
-                raise ValueError("window_function must be  Nk * Nk matrix")
-            else:
-                if val.shape not in [
-                    (len(self.power_spectrum), len(self.kpar_bins_theory))
-                ]:
-                    raise ValueError("window_function must be  Nk_obs * Nk_th matrix")
-                else:
-                    # check nornalisation of cylindrical window functions
-                    sum_per_bin = np.sum(val, axis=1)[:, None]
-                    if not np.allclose(sum_per_bin[sum_per_bin != 0.0], 1.0):
-                        warnings.warn(
-                            "window_function not normalised... normalising inplace."
-                        )
-                        val = np.divide(val, sum_per_bin, where=sum_per_bin != 0)
+        if (
+            val.shape not in [(len(self.power_spectrum), len(self.power_spectrum))]
+            and self.kpar_bins_theory is None
+        ):
+            raise ValueError("window_function must be  Nk * Nk matrix")
+        elif val.shape not in [(len(self.power_spectrum), len(self.kpar_bins_theory))]:
+            raise ValueError("window_function must be  Nk_obs * Nk_th matrix")
+        elif val.shape in [(len(self.power_spectrum), len(self.kpar_bins_theory))]:
+            # check nornalisation of cylindrical window functions
+            sum_per_bin = np.sum(val, axis=1)[:, None]
+            if not np.allclose(sum_per_bin[sum_per_bin != 0.0], 1.0):
+                warnings.warn("window_function not normalised... normalising inplace.")
+                val = np.divide(val, sum_per_bin, where=sum_per_bin != 0)
 
     @window_integration_rule.validator
     def _wir_vld(self, att, val):
