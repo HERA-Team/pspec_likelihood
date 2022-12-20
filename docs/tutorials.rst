@@ -10,3 +10,4 @@ with ``pspec_likelihood``, and use it efficiently.
    :maxdepth: 2
 
    tutorials/getting_started
+   tutorials/fit_micro21cm_emcee
