@@ -2,6 +2,9 @@
 
 <!--next-version-placeholder-->
 
+## v0.2.0 (2022-12-29)
+
+
 ## dev
 
 ### Features
