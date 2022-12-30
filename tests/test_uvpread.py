@@ -1,15 +1,16 @@
 """Test loading an UVPspec file"""
-import os
+from pathlib import Path
 
 import astropy.units as un
 import hera_pspec as hp
 import numpy as np
 import pytest
 from astropy.cosmology import units as cu
-from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 
 from pspec_likelihood import DataModelInterface
+
+DATA_PATH = Path(__file__).parent / "data"
 
 
 def dummy_theory_model(z, k):
@@ -21,8 +22,6 @@ def dummy_sys_model(z, k):
 
 
 def prepare_uvp_object(
-    path_to_wf="tests/data/",
-    dfile="data_calibrated_testfile.h5",
     time_avg=True,
     spherical_avg=True,
     redundant_avg=True,
@@ -30,10 +29,10 @@ def prepare_uvp_object(
     # Based on https://github.com/HERA-Team/pspec_likelihood/blob/api_idr2like/
     # dvlpt/tests_data_file.ipynb
     uvd = UVData()
-    uvd.read_uvh5(os.path.join(path_to_wf, dfile))
+    uvd.read_uvh5(DATA_PATH / "data_calibrated_testfile.h5")
     # beam
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits")
-    uvb = hp.pspecbeam.PSpecBeamUV(beamfile)
+    beamfile = DATA_PATH / "HERA_NF_pstokes_power.beamfits"
+    uvb = hp.pspecbeam.PSpecBeamUV(str(beamfile))
     # Create a new PSpecData object, and don't forget to feed the beam object
     ds = hp.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
     ds.Jy_to_mK()
@@ -153,12 +152,11 @@ def test_warning_not_redundantly_averaged():
 
 
 def test_exception_no_units():
-    dfile = "zen.2458116.31939.HH.uvh5"
-    datafile = os.path.join(DATA_PATH, dfile)
+    datafile = DATA_PATH / "zen.2458116.31939.HH.uvh5"
     uvd = UVData()
     uvd.read_uvh5(datafile)
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    uvb = hp.pspecbeam.PSpecBeamUV(beamfile, cosmo=None)
+    beamfile = DATA_PATH / "HERA_NF_dipole_power.beamfits"
+    uvb = hp.pspecbeam.PSpecBeamUV(str(beamfile), cosmo=None)
     jy_to_mk = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol="xx")
     # reshape to appropriately match a UVData.data_array object and multiply in!
     uvd.data_array *= jy_to_mk[None, None, :, None]
