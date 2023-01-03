@@ -20,6 +20,7 @@ from scipy.stats import multivariate_normal
 
 from . import types as tp
 from .types import vld_unit
+from .utils import normalize_wf as wf_cvt
 
 
 @attr.s(kw_only=True)
@@ -114,7 +115,7 @@ class DataModelInterface:
     power_spectrum: tp.PowerType = attr.ib(
         validator=vld_unit(un.mK**2), eq=tp.cmp_array
     )
-    window_function: np.ndarray = attr.ib(eq=tp.cmp_array, converter=np.array)
+    window_function: np.ndarray = attr.ib(eq=tp.cmp_array, converter=wf_cvt)
     covariance: tp.CovarianceType = attr.ib(
         validator=vld_unit(un.mK**4), eq=tp.cmp_array
     )
@@ -177,21 +178,27 @@ class DataModelInterface:
     def _kperp_theory_default(self):
         return self.kperp_bins_obs
 
+    @property
+    def nk_obs(self):
+        """Define attribute describing size of obs dataset."""
+        return np.size(self.power_spectrum)
+
+    @property
+    def nk_theory(self):
+        """Define attribute describing size of theory dataset."""
+        return np.size(self.kpar_bins_theory)
+
     @window_function.validator
     def _wf_vld(self, att, val):
         if (
-            val.shape not in [(len(self.power_spectrum), len(self.power_spectrum))]
+            val.shape != (self.nk_obs, self.nk_obs)
             and self.kpar_bins_theory is None
+            # check if spherically averaged theory or if
+            # cylindrical window functions are used
         ):
             raise ValueError("window_function must be  Nk * Nk matrix")
-        elif val.shape not in [(len(self.power_spectrum), len(self.kpar_bins_theory))]:
+        elif val.shape != (self.nk_obs, self.nk_theory):
             raise ValueError("window_function must be  Nk_obs * Nk_th matrix")
-        elif val.shape in [(len(self.power_spectrum), len(self.kpar_bins_theory))]:
-            # check nornalisation of cylindrical window functions
-            sum_per_bin = np.sum(val, axis=1)[:, None]
-            if not np.allclose(sum_per_bin[sum_per_bin != 0.0], 1.0):
-                warnings.warn("window_function not normalised... normalising inplace.")
-                val = np.divide(val, sum_per_bin, where=sum_per_bin != 0)
 
     @window_integration_rule.validator
     def _wir_vld(self, att, val):
@@ -206,8 +213,8 @@ class DataModelInterface:
     @covariance.validator
     def _cov_vld(self, att, val):
         if val.shape not in [
-            (len(self.power_spectrum),),
-            (len(self.power_spectrum), len(self.power_spectrum)),
+            (self.nk_obs,),
+            (self.nk_obs, self.nk_obs),
         ]:
             raise ValueError("covariance must be Nk*Nk matrix or length-Nk vector")
 
