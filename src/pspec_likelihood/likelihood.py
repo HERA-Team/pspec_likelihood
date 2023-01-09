@@ -188,16 +188,25 @@ class DataModelInterface:
         """Define attribute describing size of theory dataset."""
         return np.size(self.kpar_bins_theory)
 
+    @property
+    def is_spherical_theory(self):
+        """Define attribute describing nature of theory model."""
+        if self.kperp_bins_theory is None:
+            return True
+        else:
+            return False
+
+    @property
+    def is_spherical_obs(self):
+        """Define attribute describing nature of observations."""
+        if self.kperp_bins_obs is None:
+            return True
+        else:
+            return False
+
     @window_function.validator
     def _wf_vld(self, att, val):
-        if (
-            val.shape != (self.nk_obs, self.nk_obs)
-            and self.kpar_bins_theory is None
-            # check if spherically averaged theory or if
-            # cylindrical window functions are used
-        ):
-            raise ValueError("window_function must be  Nk * Nk matrix")
-        elif val.shape != (self.nk_obs, self.nk_theory):
+        if val.shape != (self.nk_obs, self.nk_theory):
             raise ValueError("window_function must be  Nk_obs * Nk_th matrix")
 
     @window_integration_rule.validator
@@ -221,7 +230,7 @@ class DataModelInterface:
     @cached_property
     def spherical_kbins_obs(self) -> tp.Wavenumber:
         """The spherical k bins of the observation (the edges)."""
-        if self.kperp_bins_obs is not None:
+        if not self.is_spherical_obs:
             return np.sqrt(self.kpar_bins_obs**2 + self.kperp_bins_obs**2)
         else:
             return self.kpar_bins_obs
@@ -229,7 +238,7 @@ class DataModelInterface:
     @cached_property
     def spherical_kbins_theory(self) -> tp.Wavenumber:
         """The spherical k bins of the theory (edges)."""
-        if self.kperp_bins_theory is not None:
+        if not self.is_spherical_theory:
             return np.sqrt(self.kpar_bins_theory**2 + self.kperp_bins_theory**2)
         else:
             return self.kpar_bins_theory
@@ -237,7 +246,7 @@ class DataModelInterface:
     @cached_property
     def spherical_width_theory(self) -> tp.Wavenumber:
         """The spherical k bins of the theory (edges)."""
-        if self.kperp_bins_theory is not None:
+        if not self.is_spherical_theory:
             raise NotImplementedError
         else:
             return self.kpar_widths_theory
