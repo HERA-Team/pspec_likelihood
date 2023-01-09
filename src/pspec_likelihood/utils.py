@@ -24,8 +24,10 @@ def normalize_wf(arr) -> np.array:
     if np.allclose(sum_per_bin[sum_per_bin != 0.0], 1.0):
         return np.array(arr)
     else:
-        warnings.warn("Had to normalize window_function. \
-            See utils.normalize_wf.")
+        warnings.warn(
+            "Had to normalize window_function. \
+            See utils.normalize_wf."
+        )
         norm_arr = np.zeros(arr.shape)
         np.divide(arr, sum_per_bin, where=sum_per_bin != 0, out=norm_arr)
         return norm_arr
