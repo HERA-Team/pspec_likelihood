@@ -140,6 +140,7 @@ class DataModelInterface:
 
     theory_uses_little_h: bool = attr.ib(default=False, converter=bool)
     theory_uses_spherical_k: bool = attr.ib(default=False, converter=bool)
+    obs_use_spherical_k: bool = attr.ib(default=False, converter=bool)
 
     theory_param_names: Sequence[str] | None = attr.ib(
         None, converter=attr.converters.optional(tuple)
@@ -188,26 +189,10 @@ class DataModelInterface:
         """Define attribute describing size of theory dataset."""
         return np.size(self.kpar_bins_theory)
 
-    @property
-    def is_spherical_theory(self):
-        """Define attribute describing nature of theory model."""
-        if self.kperp_bins_theory is None:
-            return True
-        else:
-            return False
-
-    @property
-    def is_spherical_obs(self):
-        """Define attribute describing nature of observations."""
-        if self.kperp_bins_obs is None:
-            return True
-        else:
-            return False
-
     @window_function.validator
     def _wf_vld(self, att, val):
         if val.shape != (self.nk_obs, self.nk_theory):
-            raise ValueError("window_function must be  Nk_obs * Nk_th matrix")
+            raise ValueError("window_function must be  (Nk_obs, Nk_th) matrix")
 
     @window_integration_rule.validator
     def _wir_vld(self, att, val):
@@ -230,7 +215,7 @@ class DataModelInterface:
     @cached_property
     def spherical_kbins_obs(self) -> tp.Wavenumber:
         """The spherical k bins of the observation (the edges)."""
-        if not self.is_spherical_obs:
+        if not self.obs_use_spherical_k:
             return np.sqrt(self.kpar_bins_obs**2 + self.kperp_bins_obs**2)
         else:
             return self.kpar_bins_obs
@@ -238,7 +223,7 @@ class DataModelInterface:
     @cached_property
     def spherical_kbins_theory(self) -> tp.Wavenumber:
         """The spherical k bins of the theory (edges)."""
-        if not self.is_spherical_theory:
+        if not self.theory_uses_spherical_k:
             return np.sqrt(self.kpar_bins_theory**2 + self.kperp_bins_theory**2)
         else:
             return self.kpar_bins_theory
@@ -246,7 +231,7 @@ class DataModelInterface:
     @cached_property
     def spherical_width_theory(self) -> tp.Wavenumber:
         """The spherical k bins of the theory (edges)."""
-        if not self.is_spherical_theory:
+        if not self.theory_uses_spherical_k:
             raise NotImplementedError
         else:
             return self.kpar_widths_theory
@@ -306,8 +291,8 @@ class DataModelInterface:
         # Get wavenumbers perpendicular to line of sight
         # Check if the data has been spherically averaged, in that
         # case we use kpar by convention and kperp is set to None.
-        spherically_averaged = "Spherically averaged with hera_pspec" in uvp.history
-        if spherically_averaged:
+        obs_use_spherical_k = "Spherically averaged with hera_pspec" in uvp.history
+        if obs_use_spherical_k:
             print("Treating as spherically averaged")
             assert (
                 len(uvp.get_kperps(spw)) == 1
@@ -388,7 +373,7 @@ class DataModelInterface:
             raise AttributeError(
                 "Window functions are not defined on the UVPspec object"
             ) from e
-        if uvp.exact_windows and not spherically_averaged:
+        if uvp.exact_windows and not obs_use_spherical_k:
             # Extract exact window functions from UVPSpec object
             kperps_wf = uvp.window_function_kperp[spw][:, polpair_index]
             kparas_wf = uvp.window_function_kpara[spw][:, polpair_index]
@@ -420,12 +405,12 @@ class DataModelInterface:
         if not isinstance(kpar_bins_obs, un.Quantity):
             unit = cu.littleh / un.Mpc if use_littleh else un.Mpc**-1
             kpar_bins_obs <<= unit
-            if not spherically_averaged:
+            if not obs_use_spherical_k:
                 kperp_bins_obs <<= unit
         if not isinstance(kpar_bins_theory, un.Quantity):
             unit = cu.littleh / un.Mpc if use_littleh else un.Mpc**-1
             kpar_bins_theory <<= unit
-            if not spherically_averaged:
+            if not obs_use_spherical_k:
                 kperp_bins_theory <<= unit
 
         if hasattr(uvp, "cosmo"):
@@ -439,6 +424,7 @@ class DataModelInterface:
 
         return DataModelInterface(
             theory_uses_spherical_k=theory_uses_spherical_k,
+            obs_use_spherical_k=obs_use_spherical_k,
             redshift=redshift,
             kperp_bins_obs=kperp_bins_obs,
             kpar_bins_obs=kpar_bins_obs,
