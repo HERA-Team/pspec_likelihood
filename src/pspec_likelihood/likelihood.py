@@ -215,7 +215,7 @@ class DataModelInterface:
     @cached_property
     def spherical_kbins_obs(self) -> tp.Wavenumber:
         """The spherical k bins of the observation (the edges)."""
-        if not self.obs_use_spherical_k:
+        if self.kperp_bins_obs is not None:
             return np.sqrt(self.kpar_bins_obs**2 + self.kperp_bins_obs**2)
         else:
             return self.kpar_bins_obs
@@ -223,7 +223,7 @@ class DataModelInterface:
     @cached_property
     def spherical_kbins_theory(self) -> tp.Wavenumber:
         """The spherical k bins of the theory (edges)."""
-        if not self.theory_uses_spherical_k:
+        if self.kperp_bins_theory is not None:
             return np.sqrt(self.kpar_bins_theory**2 + self.kperp_bins_theory**2)
         else:
             return self.kpar_bins_theory
