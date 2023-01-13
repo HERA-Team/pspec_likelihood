@@ -52,8 +52,6 @@ def test_like(uvp1):
         theory_model=powerlaw_eor_spherical,
         sys_model=None,
         theory_uses_spherical_k=True,
-        kpar_bins_theory=np.linspace(0.1, 1, 40) / un.Mpc,
-        kperp_bins_theory=None,
         kpar_widths_theory=1e-2 * np.ones(40) / un.Mpc,
         kperp_widths_theory=None,
     )
@@ -89,10 +87,6 @@ def test_little_h(uvp1):
         theory_uses_little_h=False,
         sys_model=None,
         theory_uses_spherical_k=True,
-        kpar_bins_theory=np.linspace(0.1, 1, 40) / un.Mpc,
-        kperp_bins_theory=None,
-        kpar_widths_theory=1e-2 * np.ones(40) / un.Mpc,
-        kperp_widths_theory=None,
     )
     dmi2 = DataModelInterface.from_uvpspec(
         uvp1,
@@ -101,10 +95,6 @@ def test_little_h(uvp1):
         theory_uses_little_h=True,
         sys_model=None,
         theory_uses_spherical_k=True,
-        kpar_bins_theory=np.linspace(0.1, 1, 40) / un.Mpc,
-        kperp_bins_theory=None,
-        kpar_widths_theory=1e-2 * np.ones(40) / un.Mpc,
-        kperp_widths_theory=None,
     )
 
     with pytest.warns(UserWarning, match="Your covariance matrix is not diagonal"):

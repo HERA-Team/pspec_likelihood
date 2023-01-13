@@ -248,8 +248,6 @@ class DataModelInterface:
         spw: int = 0,
         polpair_index: int = 0,
         theory_uses_spherical_k: bool = False,
-        kpar_bins_theory: tp.Wavenumber | None = None,
-        kperp_bins_theory: tp.Wavenumber | None = None,
         **kwargs,
     ) -> DataModelInterface:
         r"""Extract parameters from UVPSpec object.
@@ -281,6 +279,12 @@ class DataModelInterface:
                 "The UVPSpec object has not been fully time-averaged. "
                 "Please time-average with uvp.average_spectra(time_avg=True) before "
                 "passing to DataModelInterface.from_uvpspec"
+            )
+
+        if "kpar_bins_theory" in kwargs or "kperp_bins_theory" in kwargs:
+            raise ValueError(
+                "Cannot feed theory bins to method. They are defined by "
+                "the window functions of the UVPSpec object."
             )
 
         spw_frequencies = uvp.get_spw_ranges()[spw][:2]
@@ -395,10 +399,8 @@ class DataModelInterface:
             assert np.shape(wf_3d) == (n_perp, n_para, n_para)
             window_function = block_diag(*wf_3d)
             assert np.shape(window_function) == (n_perp * n_para, n_perp * n_para)
-            if kpar_bins_theory is None:
-                kpar_bins_theory = deepcopy(kpar_bins_obs)
-            if kperp_bins_theory is None:
-                kperp_bins_theory = deepcopy(kperp_bins_obs)
+            kpar_bins_theory = deepcopy(kpar_bins_obs)
+            kperp_bins_theory = deepcopy(kperp_bins_obs)
 
         use_littleh = "h^-3" in uvp.units
 

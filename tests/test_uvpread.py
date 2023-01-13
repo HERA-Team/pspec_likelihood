@@ -5,7 +5,6 @@ import astropy.units as un
 import hera_pspec as hp
 import numpy as np
 import pytest
-from astropy.cosmology import units as cu
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 
@@ -215,11 +214,39 @@ def test_exception_no_units():
                 spw=0,
                 theory_model=dummy_theory_model,
                 sys_model=dummy_sys_model,
-                kpar_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-                kperp_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-                kpar_widths_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-                kperp_widths_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
             )
+
+
+def test_input_theory_kbins():
+    uvp = prepare_uvp_object(spherical_avg=True)
+    # test error if kperp_bins_theory is fed
+    with pytest.raises(ValueError) as e:
+        DataModelInterface.from_uvpspec(
+            uvp=uvp,
+            spw=0,
+            theory_model=dummy_theory_model,
+            theory_uses_spherical_k=True,
+            kperp_bins_theory=np.linspace(0.01, 0.1, 40),
+        )
+        print(e)
+        assert str(e.value) == (
+            "Cannot feed theory bins to method. They are defined by "
+            "the window functions of the UVPSpec object."
+        )
+    # test error if kpar_bins_theory is fed
+    with pytest.raises(ValueError) as e:
+        DataModelInterface.from_uvpspec(
+            uvp=uvp,
+            spw=0,
+            theory_model=dummy_theory_model,
+            theory_uses_spherical_k=True,
+            kpar_bins_theory=np.linspace(0.01, 0.1, 40),
+        )
+        print(e)
+        assert str(e.value) == (
+            "Cannot feed theory bins to method. They are defined by "
+            "the window functions of the UVPSpec object."
+        )
 
 
 def test_IDR2_file(uvp1):  # noqa: N802
@@ -229,9 +256,6 @@ def test_IDR2_file(uvp1):  # noqa: N802
         spw=1,
         theory_model=dummy_theory_model,
         sys_model=dummy_sys_model,
-        kpar_bins_theory=np.ones(40) * (1 / un.Mpc),
-        kperp_bins_theory=None,
-        kpar_widths_theory=np.ones(40) * (1 / un.Mpc),
     )
     assert np.shape(dmi1.covariance) == (40, 40)  # right shape
     assert dmi1.kperp_bins_obs is None  # data should be sperically averaged
