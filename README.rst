@@ -6,7 +6,7 @@ pspec_likelihood
 
 .. image:: https://github.com/hera-team/pspec_likelihood/workflows/Tests/badge.svg
     :target: https://github.com/steven-murray/hmf
-.. image:: https://codecov.io/gh/hera-team/pspec_likelihood/branch/master/graph/badge.svg
+.. image:: https://codecov.io/gh/hera-team/pspec_likelihood/branch/main/graph/badge.svg
     :target: https://codecov.io/gh/steven-murray/hmf
 .. image:: https://img.shields.io/badge/code%20style-black-000000.svg
     :target: https://github.com/psf/black
