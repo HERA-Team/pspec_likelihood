@@ -20,7 +20,7 @@ jobs:
        # Adding -l {0} ensures conda can be found properly in each step
        shell: bash -l {0}
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@main
         with:
           fetch-depth: 1
 
@@ -65,7 +65,7 @@ jobs:
     # Step 5. Publish to TestPyPI
     - name: Publish 📦 to Test PyPI
       if: ${{ !contains(github.ref, 'main') }}
-      uses: pypa/gh-action-pypi-publish@master
+      uses: pypa/gh-action-pypi-publish@release/v1
       with:
         password: ${{ secrets.test_pypi_password }}
         repository_url: https://test.pypi.org/legacy/
@@ -79,6 +79,6 @@ jobs:
     # Step 7. Publish to PyPI
     - name: Publish 📦 to PyPI
       if: startsWith(github.ref, 'refs/tags')
-      uses: pypa/gh-action-pypi-publish@master
+      uses: pypa/gh-action-pypi-publish@release/v1
       with:
         password: ${{ secrets.pypi_password }}
