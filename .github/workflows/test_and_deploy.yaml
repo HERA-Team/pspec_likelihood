@@ -15,10 +15,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         python-version: [3.8, 3.9, "3.10", "3.11"]
-    defaults:
-     run:
-       # Adding -l {0} ensures conda can be found properly in each step
-       shell: bash -l {0}
     steps:
       - uses: actions/checkout@main
         with:
