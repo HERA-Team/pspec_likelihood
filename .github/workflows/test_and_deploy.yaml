@@ -29,7 +29,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install
-        run: pip install .[tests]
+        run: python -m pip install .[tests]
 
       - name: Run Tests
         run: |
@@ -58,7 +58,7 @@ jobs:
     # Step 4. Use PSR to make release
     - name: Python Semantic Release
       run: |
-          pip install python-semantic-release
+          python -m pip install python-semantic-release
           git config user.name github-actions
           git config user.email github-actions@github.com
           semantic-release publish
@@ -72,7 +72,7 @@ jobs:
     # Step 6. Test install from TestPyPI
     - name: Test install from TestPyPI
       run: |
-          pip install \
+          python -m pip install \
           --index-url https://test.pypi.org/simple/ \
           --extra-index-url https://pypi.org/simple \
           pspec_likelihood
