@@ -14,59 +14,26 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: [3.8, 3.9, "3.10", "3.11"]
-    defaults:
-     run:
-       # Adding -l {0} ensures conda can be found properly in each step
-       shell: bash -l {0}
+        python-version: [3.8, 3.9, "3.10"]
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@main
         with:
           fetch-depth: 1
 
-      - name: Cache conda
-        uses: actions/cache@v2
-        env:
-          # Increase this value to reset cache if ci/tests.yaml has not changed
-          CACHE_NUMBER: 0
+      - uses: actions/setup-python@v4
         with:
-          path: ~/conda_pkgs_dir
-          key:
-            ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{ matrix.python-version }}-${{ hashFiles('ci/tests.yaml', 'setup.cfg') }}
-
-      - name: Setup Miniconda
-        uses: conda-incubator/setup-miniconda@v2.1.1
-        with:
-          # auto-update-conda: true
-          miniconda-version: "latest"
           python-version: ${{ matrix.python-version }}
-          environment-file: ci/tests.yaml
-          activate-environment: tests
-          channels: conda-forge,defaults
-          channel-priority: strict
-          use-only-tar-bz2: true
-
-      - name: Conda Info
-        run: |
-          conda info -a
-          conda list
-          PYVER=`python -c "import sys; print('{:d}.{:d}'.format(sys.version_info.major, sys.version_info.minor))"`
-          if [[ $PYVER != $PYTHON ]]; then
-            exit 1;
-          fi
 
       - name: Install
-        run: |
-          pip install .[tests]
+        run: python -m pip install .[tests]
 
       - name: Run Tests
         run: |
           python -m pytest --cov=pspec_likelihood --cov-config=.coveragerc --cov-report xml:./coverage.xml --durations=25
 
-      - uses: codecov/codecov-action@v2
+      - uses: codecov/codecov-action@v3
         if: matrix.os == 'ubuntu-latest' && success()
         with:
-          token: ${{secrets.CODECOV_TOKEN}} #required
           file: ./coverage.xml #optional
 
   deploy:
@@ -87,27 +54,27 @@ jobs:
     # Step 4. Use PSR to make release
     - name: Python Semantic Release
       run: |
-          pip install python-semantic-release
+          python -m pip install python-semantic-release
           git config user.name github-actions
           git config user.email github-actions@github.com
           semantic-release publish
     # Step 5. Publish to TestPyPI
     - name: Publish 📦 to Test PyPI
       if: ${{ !contains(github.ref, 'main') }}
-      uses: pypa/gh-action-pypi-publish@master
+      uses: pypa/gh-action-pypi-publish@release/v1
       with:
         password: ${{ secrets.test_pypi_password }}
         repository_url: https://test.pypi.org/legacy/
     # Step 6. Test install from TestPyPI
     - name: Test install from TestPyPI
       run: |
-          pip install \
+          python -m pip install \
           --index-url https://test.pypi.org/simple/ \
           --extra-index-url https://pypi.org/simple \
           pspec_likelihood
     # Step 7. Publish to PyPI
     - name: Publish 📦 to PyPI
       if: startsWith(github.ref, 'refs/tags')
-      uses: pypa/gh-action-pypi-publish@master
+      uses: pypa/gh-action-pypi-publish@release/v1
       with:
         password: ${{ secrets.pypi_password }}
