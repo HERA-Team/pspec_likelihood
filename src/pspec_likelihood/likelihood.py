@@ -266,20 +266,13 @@ class DataModelInterface:
         DataModelInterface
             Initialized DataModelInterface instance
         """
+        # Perform checks to ensure UVPSpec object fed is correctly defined
+        check_uvp(uvp)
+
         # Note that the following is a little brittle.
         if " k^3 / (2pi^2)" not in uvp.norm_units:
             warnings.warn("Converting to Delta^2 in place...")
             uvp.convert_to_deltasq(inplace=True)
-
-        if "(mK)^2" not in uvp.units:
-            raise ValueError(f"Power Spectrum must be in mK^2 units. Got {uvp.units}")
-
-        if uvp.Ntimes > 1:
-            raise ValueError(
-                "The UVPSpec object has not been fully time-averaged. "
-                "Please time-average with uvp.average_spectra(time_avg=True) before "
-                "passing to DataModelInterface.from_uvpspec"
-            )
 
         if "kpar_bins_theory" in kwargs or "kperp_bins_theory" in kwargs:
             raise ValueError(
@@ -358,25 +351,14 @@ class DataModelInterface:
         # block-diagonal on the (N_perp*N_para)-long reshaped axis.
         # get_cov() essentially returns a list of these N_perp blocks, each
         # of shape (N_para, N_para).
-        try:
-            cov_3d = np.array([uvp.get_cov(k).real.copy()[0] for k in keys])
-        except AttributeError as e:
-            raise AttributeError(
-                "Covariance matrix is not defined on the UVPspec object"
-            ) from e
-
+        cov_3d = np.array([uvp.get_cov(k).real.copy()[0] for k in keys])
         assert np.shape(cov_3d) == (n_perp, n_para, n_para)
         covariance = block_diag(*cov_3d)
         assert np.shape(covariance) == (n_perp * n_para, n_perp * n_para)
 
         # Window functions -- same deal as with the covariance. Block diagonal
         # matrix where each block is the k_par window function for one k_perp.
-        try:
-            wf_3d = np.array([uvp.get_window_function(k)[0] for k in keys])
-        except AttributeError as e:
-            raise AttributeError(
-                "Window functions are not defined on the UVPspec object"
-            ) from e
+        wf_3d = np.array([uvp.get_window_function(k)[0] for k in keys])
         if uvp.exact_windows and not obs_use_spherical_k:
             # Extract exact window functions from UVPSpec object
             kperps_wf = uvp.window_function_kperp[spw][:, polpair_index]
@@ -403,7 +385,6 @@ class DataModelInterface:
             kperp_bins_theory = deepcopy(kperp_bins_obs)
 
         use_littleh = "h^-3" in uvp.units
-
         if not isinstance(kpar_bins_obs, un.Quantity):
             unit = cu.littleh / un.Mpc if use_littleh else un.Mpc**-1
             kpar_bins_obs <<= unit
@@ -846,3 +827,39 @@ class GaussianLinearSystematics(PSpecLikelihood):
             + 0.5 * np.log(np.linalg.det(2 * np.pi * sig_linear))
             + prior.logpdf(mu_linear)
         )
+
+
+def check_uvp(uvp):
+    """
+    Check if UVPSpec object can be used to define DataModelInterface.
+
+    Parameters
+    ----------
+        uvp: UVPSpec object
+            UVPSpec object one wants to use to define a DataModelInterface.
+
+    """
+    # Physical units
+    if "(mK)^2" not in uvp.units:
+        raise ValueError(f"Power Spectrum must be in mK^2 units. Got {uvp.units}")
+    # Time average
+    if uvp.Ntimes > 1:
+        raise ValueError(
+            "The UVPSpec object has not been fully time-averaged. "
+            "Please time-average with uvp.average_spectra(time_avg=True) before "
+            "passing to DataModelInterface.from_uvpspec"
+        )
+    # Has covariance and window functions stored?
+    key = uvp.get_all_keys()[0]
+    try:
+        uvp.get_cov(key)
+    except AttributeError as e:
+        raise AttributeError(
+            "Covariance matrix is not defined on the UVPspec object"
+        ) from e
+    try:
+        uvp.get_window_function(key)
+    except AttributeError as e:
+        raise AttributeError(
+            "Window functions are not defined on the UVPspec object"
+        ) from e
