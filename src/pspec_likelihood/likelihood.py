@@ -192,7 +192,7 @@ class DataModelInterface:
     @window_function.validator
     def _wf_vld(self, att, val):
         if val.shape != (self.nk_obs, self.nk_theory):
-            raise ValueError("window_function must be  (Nk_obs, Nk_th) matrix")
+            raise ValueError("window_function must be (Nk_obs, Nk_th) matrix")
 
     @window_integration_rule.validator
     def _wir_vld(self, att, val):

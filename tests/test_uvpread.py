@@ -25,6 +25,8 @@ def prepare_uvp_object(
     spherical_avg=True,
     redundant_avg=True,
     exact_wf=False,
+    store_cov=True,
+    store_window=True,
 ):
     # Based on https://github.com/HERA-Team/pspec_likelihood/blob/api_idr2like/
     # dvlpt/tests_data_file.ipynb
@@ -49,8 +51,8 @@ def prepare_uvp_object(
         spw_ranges=(175, 195),
         taper="bh",
         verbose=False,
-        store_cov=True,
-        store_window=True,
+        store_cov=store_cov,
+        store_window=store_window,
         baseline_tol=100.0,
     )
     print(
@@ -133,6 +135,35 @@ def test_cylindrical_ps():
     assert np.shape(dmi.kpar_bins_obs) == (40,)  # right shape
     assert np.shape(dmi.kperp_bins_obs) == (40,)  # right shape
     return dmi
+
+
+def test_missing_attributes():
+    # covariance
+    uvp1 = prepare_uvp_object(spherical_avg=False, store_cov=False)
+    with pytest.raises(AttributeError) as e:
+        DataModelInterface.from_uvpspec(
+            uvp=uvp1,
+            spw=0,
+            theory_model=dummy_theory_model,
+            theory_uses_spherical_k=True,
+        )
+        print(e)
+        assert str(e.value) == (
+            "Covariance matrix is not defined on the UVPspec object"
+        )
+    # window functions
+    uvp2 = prepare_uvp_object(spherical_avg=False, store_window=False)
+    with pytest.raises(AttributeError) as e:
+        DataModelInterface.from_uvpspec(
+            uvp=uvp2,
+            spw=0,
+            theory_model=dummy_theory_model,
+            theory_uses_spherical_k=True,
+        )
+        print(e)
+        assert str(e.value) == (
+            "Window functions are not defined on the UVPspec object"
+        )
 
 
 def test_exact_wf():
