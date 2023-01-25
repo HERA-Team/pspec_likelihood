@@ -5,7 +5,6 @@ import astropy.units as un
 import hera_pspec as hp
 import numpy as np
 import pytest
-from astropy.cosmology import units as cu
 from pyuvdata import UVData
 
 from pspec_likelihood import DataModelInterface
