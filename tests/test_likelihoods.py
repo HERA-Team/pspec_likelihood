@@ -52,8 +52,6 @@ def test_like(uvp1):
         theory_model=powerlaw_eor_spherical,
         sys_model=None,
         theory_uses_spherical_k=True,
-        kpar_bins_theory=np.linspace(0.1, 1, 40) / un.Mpc,
-        kperp_bins_theory=None,
         kpar_widths_theory=1e-2 * np.ones(40) / un.Mpc,
         kperp_widths_theory=None,
     )
@@ -89,10 +87,6 @@ def test_little_h(uvp1):
         theory_uses_little_h=False,
         sys_model=None,
         theory_uses_spherical_k=True,
-        kpar_bins_theory=np.linspace(0.1, 1, 40) / un.Mpc,
-        kperp_bins_theory=None,
-        kpar_widths_theory=1e-2 * np.ones(40) / un.Mpc,
-        kperp_widths_theory=None,
     )
     dmi2 = DataModelInterface.from_uvpspec(
         uvp1,
@@ -101,10 +95,6 @@ def test_little_h(uvp1):
         theory_uses_little_h=True,
         sys_model=None,
         theory_uses_spherical_k=True,
-        kpar_bins_theory=np.linspace(0.1, 1, 40) / un.Mpc,
-        kperp_bins_theory=None,
-        kpar_widths_theory=1e-2 * np.ones(40) / un.Mpc,
-        kperp_widths_theory=None,
     )
 
     with pytest.warns(UserWarning, match="Your covariance matrix is not diagonal"):
@@ -121,6 +111,74 @@ def test_little_h(uvp1):
         lk_with_littleh.loglike([1000.0, 2.1], []),
         rtol=1e-3,
     )
+
+
+def test_dmi_validators(uvp1):
+
+    kperp = np.linspace(0.01, 0.5, 15)
+    kpar = np.linspace(0.01, 0.5, 100)
+
+    kperp, kpar = np.meshgrid(kperp, kpar)
+    kperp = kperp.flatten()
+    kpar = kpar.flatten()
+    k = np.sqrt(kpar**2 + kperp**2)
+
+    z = 9.0
+    amp, indx = 1e5, 2.7
+    power = powerlaw_eor_cylindrical(z, (kperp, kpar), [amp, indx])
+
+    covariance = np.diag(k**3 * 1e5)
+    window_function = np.eye(len(k))
+
+    with pytest.raises(ValueError) as e:
+        DataModelInterface(
+            cosmology=cosmology.Planck18,
+            redshift=z,
+            power_spectrum=power,
+            window_function=window_function[:3, :3],
+            covariance=covariance * un.mK**4,
+            kpar_bins_obs=kpar * cosmology.units.littleh / un.Mpc,
+            kperp_bins_obs=kperp * cosmology.units.littleh / un.Mpc,
+            theory_uses_little_h=True,
+            theory_uses_spherical_k=True,
+            theory_model=powerlaw_eor_spherical,
+        )
+        print(e)
+        assert str(e.value) == ("window_function must be " "(Nk_obs, Nk_th) matrix")
+
+    with pytest.raises(ValueError) as e:
+        DataModelInterface(
+            cosmology=cosmology.Planck18,
+            redshift=z,
+            power_spectrum=power,
+            window_function=window_function,
+            covariance=covariance * un.mK**4,
+            kpar_bins_obs=kpar[:3] * cosmology.units.littleh / un.Mpc,
+            kperp_bins_obs=kperp * cosmology.units.littleh / un.Mpc,
+            theory_uses_little_h=True,
+            theory_uses_spherical_k=True,
+            theory_model=powerlaw_eor_spherical,
+        )
+        print(e)
+        assert str(e.value) == (
+            "kpar_bins_obs must have same shape as the power spectrum"
+        )
+
+    with pytest.raises(ValueError) as e:
+        DataModelInterface(
+            cosmology=cosmology.Planck18,
+            redshift=z,
+            power_spectrum=power,
+            window_function=window_function,
+            covariance=covariance[:3, :3] * un.mK**4,
+            kpar_bins_obs=kpar * cosmology.units.littleh / un.Mpc,
+            kperp_bins_obs=kperp * cosmology.units.littleh / un.Mpc,
+            theory_uses_little_h=True,
+            theory_uses_spherical_k=True,
+            theory_model=powerlaw_eor_spherical,
+        )
+        print(e)
+        assert str(e.value) == ("covariance must be Nk*Nk matrix or length-Nk vector")
 
 
 # theory_uses_little_h is False by default

@@ -5,7 +5,6 @@ import astropy.units as un
 import hera_pspec as hp
 import numpy as np
 import pytest
-from astropy.cosmology import units as cu
 from pyuvdata import UVData
 
 from pspec_likelihood import DataModelInterface
@@ -25,6 +24,9 @@ def prepare_uvp_object(
     time_avg=True,
     spherical_avg=True,
     redundant_avg=True,
+    exact_wf=False,
+    store_cov=True,
+    store_window=True,
 ):
     # Based on https://github.com/HERA-Team/pspec_likelihood/blob/api_idr2like/
     # dvlpt/tests_data_file.ipynb
@@ -49,8 +51,8 @@ def prepare_uvp_object(
         spw_ranges=(175, 195),
         taper="bh",
         verbose=False,
-        store_cov=True,
-        store_window=True,
+        store_cov=store_cov,
+        store_window=store_window,
         baseline_tol=100.0,
     )
     print(
@@ -82,6 +84,21 @@ def prepare_uvp_object(
         blpair_groups,
     )
     print("Data array shape with these only", uvp.data_array[0].shape)
+    if exact_wf:
+        # obtain exact window functions for Gaussian beam
+        s, i = -3.431e-02, 1.130e01
+        bw = np.linspace(1, 2, 1024, endpoint=False) * 1e8
+        gaussian_beam = hp.FTBeam.gaussian(
+            freq_array=bw[:205],
+            widths=s * bw[:205] / 1e6 + i,
+            pol="pI",
+            mapsize=1.0,
+            npix=301,
+            cosmo=uvp.cosmo,
+        )
+        uvp.get_exact_window_functions(
+            ftbeam=gaussian_beam, inplace=True, verbose=False
+        )
     # perform redundant average
     if redundant_avg:
         uvp.average_spectra(blpair_groups=blpair_groups)
@@ -117,6 +134,48 @@ def test_cylindrical_ps():
     assert np.shape(dmi.covariance) == (40, 40)  # right shape
     assert np.shape(dmi.kpar_bins_obs) == (40,)  # right shape
     assert np.shape(dmi.kperp_bins_obs) == (40,)  # right shape
+    return dmi
+
+
+def test_missing_attributes():
+    # covariance
+    uvp1 = prepare_uvp_object(spherical_avg=False, store_cov=False)
+    with pytest.raises(AttributeError) as e:
+        DataModelInterface.from_uvpspec(
+            uvp=uvp1,
+            spw=0,
+            theory_model=dummy_theory_model,
+            theory_uses_spherical_k=True,
+        )
+        print(e)
+        assert str(e.value) == (
+            "Covariance matrix is not defined on the UVPspec object"
+        )
+    # window functions
+    uvp2 = prepare_uvp_object(spherical_avg=False, store_window=False)
+    with pytest.raises(AttributeError) as e:
+        DataModelInterface.from_uvpspec(
+            uvp=uvp2,
+            spw=0,
+            theory_model=dummy_theory_model,
+            theory_uses_spherical_k=True,
+        )
+        print(e)
+        assert str(e.value) == (
+            "Window functions are not defined on the UVPspec object"
+        )
+
+
+def test_exact_wf():
+    uvp = prepare_uvp_object(spherical_avg=False, exact_wf=True)
+    dmi = DataModelInterface.from_uvpspec(
+        uvp=uvp, spw=0, theory_model=dummy_theory_model, theory_uses_spherical_k=True
+    )
+    assert np.shape(dmi.covariance) == (40, 40)  # right shape
+    assert np.shape(dmi.kpar_bins_obs) == (40,)  # right shape
+    assert np.shape(dmi.kperp_bins_obs) == (40,)  # right shape
+    print(dmi.kpar_bins_obs.shape, dmi.window_function.shape)
+    assert np.shape(dmi.kpar_bins_obs) != np.shape(dmi.kpar_bins_theory)  #
     return dmi
 
 
@@ -184,11 +243,39 @@ def test_exception_no_units():
                 spw=0,
                 theory_model=dummy_theory_model,
                 sys_model=dummy_sys_model,
-                kpar_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-                kperp_bins_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-                kpar_widths_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
-                kperp_widths_theory=np.ones(20 * 12) * (cu.littleh / un.Mpc),
             )
+
+
+def test_input_theory_kbins():
+    uvp = prepare_uvp_object(spherical_avg=True)
+    # test error if kperp_bins_theory is fed
+    with pytest.raises(ValueError) as e:
+        DataModelInterface.from_uvpspec(
+            uvp=uvp,
+            spw=0,
+            theory_model=dummy_theory_model,
+            theory_uses_spherical_k=True,
+            kperp_bins_theory=np.linspace(0.01, 0.1, 40),
+        )
+        print(e)
+        assert str(e.value) == (
+            "Cannot feed theory bins to method. They are defined by "
+            "the window functions of the UVPSpec object."
+        )
+    # test error if kpar_bins_theory is fed
+    with pytest.raises(ValueError) as e:
+        DataModelInterface.from_uvpspec(
+            uvp=uvp,
+            spw=0,
+            theory_model=dummy_theory_model,
+            theory_uses_spherical_k=True,
+            kpar_bins_theory=np.linspace(0.01, 0.1, 40),
+        )
+        print(e)
+        assert str(e.value) == (
+            "Cannot feed theory bins to method. They are defined by "
+            "the window functions of the UVPSpec object."
+        )
 
 
 def test_IDR2_file(uvp1):  # noqa: N802
@@ -198,9 +285,6 @@ def test_IDR2_file(uvp1):  # noqa: N802
         spw=1,
         theory_model=dummy_theory_model,
         sys_model=dummy_sys_model,
-        kpar_bins_theory=np.ones(40) * (1 / un.Mpc),
-        kperp_bins_theory=None,
-        kpar_widths_theory=np.ones(40) * (1 / un.Mpc),
     )
     assert np.shape(dmi1.covariance) == (40, 40)  # right shape
     assert dmi1.kperp_bins_obs is None  # data should be sperically averaged

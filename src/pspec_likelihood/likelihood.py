@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import warnings
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from typing import Callable, Literal, Sequence
 
 import astropy.cosmology as csm
@@ -19,6 +20,7 @@ from scipy.stats import multivariate_normal
 
 from . import types as tp
 from .types import vld_unit
+from .utils import normalize_wf as wf_cvt
 
 
 @attr.s(kw_only=True)
@@ -113,7 +115,7 @@ class DataModelInterface:
     power_spectrum: tp.PowerType = attr.ib(
         validator=vld_unit(un.mK**2), eq=tp.cmp_array
     )
-    window_function: np.ndarray = attr.ib(eq=tp.cmp_array, converter=np.array)
+    window_function: np.ndarray = attr.ib(eq=tp.cmp_array, converter=wf_cvt)
     covariance: tp.CovarianceType = attr.ib(
         validator=vld_unit(un.mK**4), eq=tp.cmp_array
     )
@@ -138,6 +140,7 @@ class DataModelInterface:
 
     theory_uses_little_h: bool = attr.ib(default=False, converter=bool)
     theory_uses_spherical_k: bool = attr.ib(default=False, converter=bool)
+    obs_use_spherical_k: bool = attr.ib(default=False, converter=bool)
 
     theory_param_names: Sequence[str] | None = attr.ib(
         None, converter=attr.converters.optional(tuple)
@@ -148,7 +151,7 @@ class DataModelInterface:
     apply_window_to_systematics: bool = attr.ib(True, converter=bool)
 
     @kpar_bins_obs.validator
-    @kpar_bins_theory.validator
+    # @kpar_bins_theory.validator
     def _k_validator(self, att, val):
         if not np.isrealobj(val):
             raise TypeError(f"{att.name} must be real!")
@@ -161,7 +164,7 @@ class DataModelInterface:
             raise ValueError(f"{att.name} must have same shape as the power spectrum")
 
     @kperp_bins_obs.validator
-    @kperp_bins_theory.validator
+    # @kperp_bins_theory.validator
     @kpar_widths_theory.validator
     @kperp_widths_theory.validator
     def _opt_k_vld(self, att, val):
@@ -176,10 +179,20 @@ class DataModelInterface:
     def _kperp_theory_default(self):
         return self.kperp_bins_obs
 
+    @property
+    def nk_obs(self):
+        """Define attribute describing size of obs dataset."""
+        return np.size(self.power_spectrum)
+
+    @property
+    def nk_theory(self):
+        """Define attribute describing size of theory dataset."""
+        return np.size(self.kpar_bins_theory)
+
     @window_function.validator
     def _wf_vld(self, att, val):
-        if val.shape not in [(len(self.power_spectrum), len(self.power_spectrum))]:
-            raise ValueError("window_function must be  Nk * Nk matrix")
+        if val.shape != (self.nk_obs, self.nk_theory):
+            raise ValueError("window_function must be (Nk_obs, Nk_th) matrix")
 
     @window_integration_rule.validator
     def _wir_vld(self, att, val):
@@ -194,8 +207,8 @@ class DataModelInterface:
     @covariance.validator
     def _cov_vld(self, att, val):
         if val.shape not in [
-            (len(self.power_spectrum),),
-            (len(self.power_spectrum), len(self.power_spectrum)),
+            (self.nk_obs,),
+            (self.nk_obs, self.nk_obs),
         ]:
             raise ValueError("covariance must be Nk*Nk matrix or length-Nk vector")
 
@@ -218,7 +231,7 @@ class DataModelInterface:
     @cached_property
     def spherical_width_theory(self) -> tp.Wavenumber:
         """The spherical k bins of the theory (edges)."""
-        if self.kperp_bins_theory is not None:
+        if not self.theory_uses_spherical_k:
             raise NotImplementedError
         else:
             return self.kpar_widths_theory
@@ -253,19 +266,18 @@ class DataModelInterface:
         DataModelInterface
             Initialized DataModelInterface instance
         """
+        # Perform checks to ensure UVPSpec object fed is correctly defined
+        check_uvp(uvp)
+
         # Note that the following is a little brittle.
         if " k^3 / (2pi^2)" not in uvp.norm_units:
             warnings.warn("Converting to Delta^2 in place...")
             uvp.convert_to_deltasq(inplace=True)
 
-        if "(mK)^2" not in uvp.units:
-            raise ValueError(f"Power Spectrum must be in mK^2 units. Got {uvp.units}")
-
-        if uvp.Ntimes > 1:
+        if "kpar_bins_theory" in kwargs or "kperp_bins_theory" in kwargs:
             raise ValueError(
-                "The UVPSpec object has not been fully time-averaged. "
-                "Please time-average with uvp.average_spectra(time_avg=True) before "
-                "passing to DataModelInterface.from_uvpspec"
+                "Cannot feed theory bins to method. They are defined by "
+                "the window functions of the UVPSpec object."
             )
 
         spw_frequencies = uvp.get_spw_ranges()[spw][:2]
@@ -276,8 +288,8 @@ class DataModelInterface:
         # Get wavenumbers perpendicular to line of sight
         # Check if the data has been spherically averaged, in that
         # case we use kpar by convention and kperp is set to None.
-        spherically_averaged = "Spherically averaged with hera_pspec" in uvp.history
-        if spherically_averaged:
+        obs_use_spherical_k = "Spherically averaged with hera_pspec" in uvp.history
+        if obs_use_spherical_k:
             print("Treating as spherically averaged")
             assert (
                 len(uvp.get_kperps(spw)) == 1
@@ -339,13 +351,7 @@ class DataModelInterface:
         # block-diagonal on the (N_perp*N_para)-long reshaped axis.
         # get_cov() essentially returns a list of these N_perp blocks, each
         # of shape (N_para, N_para).
-        try:
-            cov_3d = np.array([uvp.get_cov(k).real.copy()[0] for k in keys])
-        except AttributeError as e:
-            raise AttributeError(
-                "Covariance matrix is not defined on the UVPspec object"
-            ) from e
-
+        cov_3d = np.array([uvp.get_cov(k).real.copy()[0] for k in keys])
         assert np.shape(cov_3d) == (n_perp, n_para, n_para)
         covariance = block_diag(*cov_3d)
         assert np.shape(covariance) == (n_perp * n_para, n_perp * n_para)
@@ -353,17 +359,42 @@ class DataModelInterface:
         # Window functions -- same deal as with the covariance. Block diagonal
         # matrix where each block is the k_par window function for one k_perp.
         wf_3d = np.array([uvp.get_window_function(k)[0] for k in keys])
-        assert np.shape(wf_3d) == (n_perp, n_para, n_para)
-        window_function = block_diag(*wf_3d)
-        assert np.shape(window_function) == (n_perp * n_para, n_perp * n_para)
+        if uvp.exact_windows and not obs_use_spherical_k:
+            # Extract exact window functions from UVPSpec object
+            kperps_wf = uvp.window_function_kperp[spw][:, polpair_index]
+            kparas_wf = uvp.window_function_kpara[spw][:, polpair_index]
+            window_function = wf_3d.reshape(
+                (
+                    n_perp * n_para,
+                    kperps_wf.size * kparas_wf.size,
+                ),
+                order="C",
+            )
+            # Overwrite potential input k_bins_theory
+            warnings.warn(
+                "Using kperp_bins_theory and kpar_bins_theory "
+                "intrinsic to the exact window functions."
+            )
+            kperp_bins_theory = np.repeat(kperps_wf, kparas_wf.size)
+            kpar_bins_theory = np.tile(kparas_wf, kperps_wf.size)
+        else:
+            assert np.shape(wf_3d) == (n_perp, n_para, n_para)
+            window_function = block_diag(*wf_3d)
+            assert np.shape(window_function) == (n_perp * n_para, n_perp * n_para)
+            kpar_bins_theory = deepcopy(kpar_bins_obs)
+            kperp_bins_theory = deepcopy(kperp_bins_obs)
 
         use_littleh = "h^-3" in uvp.units
-
         if not isinstance(kpar_bins_obs, un.Quantity):
             unit = cu.littleh / un.Mpc if use_littleh else un.Mpc**-1
             kpar_bins_obs <<= unit
-            if not spherically_averaged:
+            if not obs_use_spherical_k:
                 kperp_bins_obs <<= unit
+        if not isinstance(kpar_bins_theory, un.Quantity):
+            unit = cu.littleh / un.Mpc if use_littleh else un.Mpc**-1
+            kpar_bins_theory <<= unit
+            if not obs_use_spherical_k:
+                kperp_bins_theory <<= unit
 
         if hasattr(uvp, "cosmo"):
             cosmo = csm.LambdaCDM(
@@ -376,9 +407,12 @@ class DataModelInterface:
 
         return DataModelInterface(
             theory_uses_spherical_k=theory_uses_spherical_k,
+            obs_use_spherical_k=obs_use_spherical_k,
             redshift=redshift,
             kperp_bins_obs=kperp_bins_obs,
             kpar_bins_obs=kpar_bins_obs,
+            kperp_bins_theory=kperp_bins_theory,
+            kpar_bins_theory=kpar_bins_theory,
             power_spectrum=power_spectrum << un.mK**2,
             covariance=covariance << un.mK**4,
             window_function=window_function,
@@ -387,10 +421,13 @@ class DataModelInterface:
         )
 
     def _kconvert(self, k):
-        return k.to_value(
-            cu.littleh / un.Mpc if self.theory_uses_little_h else "1/Mpc",
-            equivalencies=cu.with_H0(self.cosmology.H0),
-        )
+        if k is None:
+            return None
+        else:
+            return k.to_value(
+                cu.littleh / un.Mpc if self.theory_uses_little_h else "1/Mpc",
+                equivalencies=cu.with_H0(self.cosmology.H0),
+            )
 
     def _discretize(
         self,
@@ -650,6 +687,7 @@ class Gaussian(PSpecLikelihood):
         normal = multivariate_normal(
             mean=self.power_spectrum[self.data_mask],
             cov=self.model.covariance[self.data_mask][:, self.data_mask],
+            allow_singular=True,
         )
         return normal.logpdf(model[self.data_mask])
 
@@ -789,3 +827,39 @@ class GaussianLinearSystematics(PSpecLikelihood):
             + 0.5 * np.log(np.linalg.det(2 * np.pi * sig_linear))
             + prior.logpdf(mu_linear)
         )
+
+
+def check_uvp(uvp):
+    """
+    Check if UVPSpec object can be used to define DataModelInterface.
+
+    Parameters
+    ----------
+        uvp: UVPSpec object
+            UVPSpec object one wants to use to define a DataModelInterface.
+
+    """
+    # Physical units
+    if "(mK)^2" not in uvp.units:
+        raise ValueError(f"Power Spectrum must be in mK^2 units. Got {uvp.units}")
+    # Time average
+    if uvp.Ntimes > 1:
+        raise ValueError(
+            "The UVPSpec object has not been fully time-averaged. "
+            "Please time-average with uvp.average_spectra(time_avg=True) before "
+            "passing to DataModelInterface.from_uvpspec"
+        )
+    # Has covariance and window functions stored?
+    key = uvp.get_all_keys()[0]
+    try:
+        uvp.get_cov(key)
+    except AttributeError as e:
+        raise AttributeError(
+            "Covariance matrix is not defined on the UVPspec object"
+        ) from e
+    try:
+        uvp.get_window_function(key)
+    except AttributeError as e:
+        raise AttributeError(
+            "Window functions are not defined on the UVPspec object"
+        ) from e
