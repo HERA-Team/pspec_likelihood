@@ -182,7 +182,7 @@ class DataModelInterface:
     @property
     def nk_obs(self):
         """Define attribute describing size of obs dataset."""
-        return np.size(self.power_spectrum)
+        return np.size(self.kpar_bins_obs)
 
     @property
     def nk_theory(self):
@@ -192,7 +192,10 @@ class DataModelInterface:
     @window_function.validator
     def _wf_vld(self, att, val):
         if val.shape != (self.nk_obs, self.nk_theory):
-            raise ValueError("window_function must be (Nk_obs, Nk_th) matrix")
+            raise ValueError(
+                "window_function must be (Nk_obs, Nk_th) matrix. Got "
+                f"{val.shape} not ({(self.nk_obs, self.nk_theory)})."
+            )
 
     @window_integration_rule.validator
     def _wir_vld(self, att, val):
