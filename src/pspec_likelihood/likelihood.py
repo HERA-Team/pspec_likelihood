@@ -4,7 +4,7 @@ from __future__ import annotations
 import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Callable, Literal, Sequence
+from typing import Callable, Sequence
 
 import astropy.cosmology as csm
 import astropy.cosmology.units as cu
@@ -13,7 +13,6 @@ import attr
 import hera_pspec as hp
 import numpy as np
 from cached_property import cached_property
-from scipy.integrate import dblquad, quad
 from scipy.linalg import block_diag
 from scipy.special import erfcx
 from scipy.stats import multivariate_normal
@@ -48,6 +47,10 @@ class DataModelInterface:
         array whose first dimension has length equal to the power spectrum, and the
         second dimension has the same length as
         ``kpar_bins_theory``/``kperp_bins_theory``.
+        They must include weight information for the integral, such that
+        P_obs(b, tau) = \int \int dkperp dkpar W(b, tau, kperp, kpar) P_th(kperp, kpar)
+        is equivalent to a matrix multiplication of the W matrix with the P_th
+        vector, computing at (kperp, kpar).
     covariance
         The data covariance matrix. If 2D, must be a square matrix with each dimension
         the same length as ``power_spectrum``. If 1D, the covariance is assumed to be
@@ -70,20 +73,6 @@ class DataModelInterface:
         *centres*, and so there should be the same number as the second dimension of the
         window function. If not provided, ``kpar_bins_theory`` is treated as the
         spherically-averaged k bins.
-    kperp_widths_theory
-        If provided, the k-perpendicular bin widths associated with each bin. It is
-        assumed that the bins are in the (linear-space) centre. Only required if
-        ``window_integration_rule`` is not ``"midpoint"``.
-    kpar_widths_theory
-        If provided, the k-parallel bin widths associated with each bin. It is
-        assumed that the bins are in the (linear-space) centre. Only required if
-        ``window_integration_rule`` is not ``"midpoint"``.
-    window_integration_rule
-        Converting from theory space to observational space is done by integrating the
-        ``window_function * theory_function`` over k-space for a given choice of
-        observational co-ordinates. This integral is discretized, and this parameter
-        provides the rule by which the *theory function* portion of the integral is
-        discretized. Choices are 'midpoint', 'trapz' or 'quad'.
     theory_uses_little_h
         Whether the theory function accepts wavenumbers in units of h/Mpc. If False,
         it accepts wavenumbers in units of 1/Mpc.
@@ -131,12 +120,6 @@ class DataModelInterface:
     kperp_bins_obs: tp.Wavenumber | None = attr.ib(None, eq=tp.cmp_array)
     kpar_bins_theory: tp.Wavenumber = attr.ib(eq=tp.cmp_array)
     kperp_bins_theory: tp.Wavenumber | None = attr.ib()
-    kperp_widths_theory: tp.Wavenumber | None = attr.ib(None)
-    kpar_widths_theory: tp.Wavenumber | None = attr.ib(None, eq=tp.cmp_array)
-
-    window_integration_rule: Literal["midpoint", "trapz", "quad"] = attr.ib(
-        "midpoint", validator=attr.validators.in_(("midpoint", "trapz", "quad"))
-    )
 
     theory_uses_little_h: bool = attr.ib(default=False, converter=bool)
     theory_uses_spherical_k: bool = attr.ib(default=False, converter=bool)
@@ -164,9 +147,6 @@ class DataModelInterface:
             raise ValueError(f"{att.name} must have same shape as the power spectrum")
 
     @kperp_bins_obs.validator
-    # @kperp_bins_theory.validator
-    @kpar_widths_theory.validator
-    @kperp_widths_theory.validator
     def _opt_k_vld(self, att, val):
         if val is not None:
             self._k_validator(att, val)
@@ -197,16 +177,6 @@ class DataModelInterface:
                 f"{val.shape} not ({(self.nk_obs, self.nk_theory)})."
             )
 
-    @window_integration_rule.validator
-    def _wir_vld(self, att, val):
-        if val != "midpoint" and (
-            (self.kperp_widths_theory is None and self.kperp_bins_theory is not None)
-            or self.kpar_widths_theory is None
-        ):
-            raise ValueError(
-                f"if window_integration_rule={val}, kpar/kperp widths are required."
-            )
-
     @covariance.validator
     def _cov_vld(self, att, val):
         if val.shape not in [
@@ -230,14 +200,6 @@ class DataModelInterface:
             return np.sqrt(self.kpar_bins_theory**2 + self.kperp_bins_theory**2)
         else:
             return self.kpar_bins_theory
-
-    @cached_property
-    def spherical_width_theory(self) -> tp.Wavenumber:
-        """The spherical k bins of the theory (edges)."""
-        if not self.theory_uses_spherical_k:
-            raise NotImplementedError
-        else:
-            return self.kpar_widths_theory
 
     @cached_property
     def kperp_centres(self) -> tp.Wavenumber:
@@ -348,7 +310,7 @@ class DataModelInterface:
             )
 
         power_spectrum = power_spectrum.reshape((n_perp * n_para), order="C")
-        # Todo: This is a bit unintuitive, check if this is the right way round!
+        # TODO: This is a bit unintuitive, check if this is the right way round!
         # Get the covariance matrix (units mK**4) of the power spectrum. Since
         # values with different k_perp are uncorrelated, this becomes a
         # block-diagonal on the (N_perp*N_para)-long reshaped axis.
@@ -432,110 +394,13 @@ class DataModelInterface:
                 equivalencies=cu.with_H0(self.cosmology.H0),
             )
 
-    def _discretize(
-        self,
-        model: Callable,
-        z: float,
-        k: tuple[np.ndarray, np.ndarray] | np.ndarray,
-        kwidth: tuple[np.ndarray, np.ndarray] | np.ndarray,
-        params: Sequence[float] | dict[str, float],
-    ) -> tuple[tp.PowerType, tp.PowerType]:
-        if self.window_integration_rule == "midpoint":
-            results = model(z, k, params)
-            errors = None
-        elif self.window_integration_rule == "trapz":
-            if isinstance(k, tuple):
-                # 2D trapezoidal integration
-                a = model(z, (k[0] - kwidth[0] / 2, k[1] - kwidth[1] / 2), params)
-                b = model(z, (k[0] + kwidth[0] / 2, k[1] - kwidth[1] / 2), params)
-                c = model(z, (k[0] - kwidth[0] / 2, k[1] + kwidth[1] / 2), params)
-                d = model(z, (k[0] + kwidth[0] / 2, k[1] + kwidth[1] / 2), params)
-                results = (a + b + c + d) / 4
-                errors = None
-            else:
-                lower = model(z, k - kwidth / 2, params)
-                upper = model(z, k + kwidth / 2, params)
-                results = (lower + upper) / 2
-                errors = (lower - upper) / 2
-        elif self.window_integration_rule == "quad":
-            k = np.asarray(k)
-            kwidth = np.asarray(kwidth)
-
-            if k.ndim == 1:
-
-                def pk_func(k):
-                    return model(z, k, params).value
-
-                unit = getattr(model(z, k[0], params), "unit", None)
-
-            else:
-
-                def pk_func(kperp, kpar):
-                    return model(z, (kperp, kpar), params).value
-
-                unit = getattr(model(z, k[:, 0], params), "unit", None)
-
-            results = []
-            errors = []
-            for center, width in zip(k.T, kwidth.T):
-                if k.ndim == 1:
-                    result, error = quad(
-                        pk_func, center - width / 2, center + width / 2
-                    )
-                elif k.ndim == 2:
-                    # TODO: Better implement this
-                    if width[0] == 0.0:
-
-                        def partial_pk(kpar):
-                            kperp = center[0]
-                            return model(z, (kperp, kpar), params).value
-
-                        result, error = quad(
-                            partial_pk,
-                            a=center[1] - width[1] / 2,
-                            b=center[1] + width[1] / 2,
-                        )
-                    elif width[1] == 0:
-
-                        def partial_pk(kperp):
-                            kpar = center[1]
-                            return model(z, (kperp, kpar), params).value
-
-                        result, error = quad(
-                            partial_pk,
-                            a=center[0] - width[0] / 2,
-                            b=center[0] + width[0] / 2,
-                        )
-                    else:
-                        result, error = dblquad(
-                            pk_func,
-                            center[0] - width[0] / 2,
-                            center[0] + width[0] / 2,
-                            center[1] - width[1] / 2,
-                            center[1] + width[1] / 2,
-                        )
-                result /= np.prod(width, where=width != 0)
-                error /= np.prod(width, where=width != 0)
-                results.append(result)
-                errors.append(result)
-
-            results = np.array(results)
-            errors = np.array(errors)
-
-            if unit is not None:
-                results <<= unit
-                errors <<= unit
-
-        return results, errors
-
     def discretize_theory(
         self, z: float, theory_params: Sequence[float] | dict[str, float]
     ) -> tuple[tp.PowerType, tp.PowerType]:
         r"""Compute the discretized power spectrum at the (k, z) of the window function.
 
-        This outputs an approximation of the integral of the theory power spectrum over
-        each cylindrical k-bin. The way in which this is done is controlled by
-        :attr:`window_integration_rule`.
+        This outputs the value of the theory power spectrum over
+        each cylindrical or spherical k-bin.
 
         Parameters
         ----------
@@ -548,43 +413,42 @@ class DataModelInterface:
         -------
         results
             list of power spectrum values corresponding to the bins
-        errors
-            Estimation of the error through binning, if a suitable method has been
-            chosen, otherwise None.
         """
         if self.theory_uses_spherical_k:
             k = self._kconvert(self.spherical_kbins_theory)
-            if self.window_integration_rule != "midpoint":
-                kwidth = self._kconvert(self.spherical_width_theory)
-            else:
-                kwidth = 0  # not required in _discretize() with midpoint rule
-
         else:
             k = (
                 self._kconvert(self.kperp_bins_theory),
                 self._kconvert(self.kpar_bins_theory),
             )
-            kwidth = (
-                self._kconvert(self.kperp_widths_theory),
-                self._kconvert(self.kpar_widths_theory),
-            )
 
         theory_params = self._validate_params(theory_params, self.theory_param_names)
-        return self._discretize(self.theory_model, z, k, kwidth, theory_params)
+        return self.theory_model(z, k, theory_params)
 
     def discretize_systematics(
         self, z: float, sys_params: Sequence[float] | dict[str, float]
     ) -> tuple[tp.PowerType, tp.PowerType]:
         r"""Compute the discretized systematic power.
 
-        This outputs an approximation of the integral of the theory power spectrum over
-        each cylindrical k-bin. The way in which this is done is controlled by
-        :attr:`window_integration_rule`.
+        This outputs the value of the the systematic model over
+        each cylindrical or spherical k-bin.
+
+        Parameters
+        ----------
+        z
+            The redshift
+        sys_params
+            sequence of parameters passed to the systematics function
+
+        Returns
+        -------
+        results
+            list of systematics values corresponding to the bins
         """
         if self.sys_model is None:
-            return 0, 0
+            return 0
 
-        if self.apply_window_to_systematics:  # todo is this right?
+        if self.apply_window_to_systematics:
             if self.theory_uses_spherical_k:
                 k = self._kconvert(self.spherical_kbins_theory)
             else:
@@ -600,10 +464,9 @@ class DataModelInterface:
                     self._kconvert(self.kperp_bins_obs),
                     self._kconvert(self.kpar_bins_obs),
                 )
-        kwidth = 0  # TODO: need to do this correctly.
 
         sys_params = self._validate_params(sys_params, self.sys_param_names)
-        return self._discretize(self.sys_model, z, k, kwidth, sys_params)
+        return self.sys_model(z, k, sys_params)
 
     def apply_window_function(self, discretized_model: tp.PowerType) -> tp.PowerType:
         r"""Calculate theoretical power spectrum with data window function applied.
@@ -662,8 +525,8 @@ class DataModelInterface:
         sys_params: Sequence[float] | dict[str, float],
     ):
         """Compute the theory+systematics model in the data-space."""
-        theory, error = self.discretize_theory(self.redshift, theory_params)
-        sys, error = self.discretize_systematics(self.redshift, sys_params)
+        theory = self.discretize_theory(self.redshift, theory_params)
+        sys = self.discretize_systematics(self.redshift, sys_params)
 
         if self.apply_window_to_systematics:
             return self.apply_window_function(theory + sys)
