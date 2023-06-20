@@ -13,7 +13,7 @@ import attr
 import hera_pspec as hp
 import numpy as np
 from cached_property import cached_property
-from scipy.integrate import quad
+from scipy.integrate import dblquad, quad
 from scipy.linalg import block_diag
 from scipy.special import erfcx
 from scipy.stats import multivariate_normal
@@ -444,21 +444,50 @@ class DataModelInterface:
             results = model(z, k, params)
             errors = None
         elif self.window_integration_rule == "trapz":
-            lower = model(z, k - kwidth / 2, params)
-            upper = model(z, k + kwidth / 2, params)
-            results = (lower + upper) / 2
-            errors = (lower - upper) / 2
+            if isinstance(k, tuple):
+                # 2D trapezoidal integration
+                a = model(z, (k[0] - kwidth[0] / 2, k[1] - kwidth[1] / 2), params)
+                b = model(z, (k[0] + kwidth[0] / 2, k[1] - kwidth[1] / 2), params)
+                c = model(z, (k[0] - kwidth[0] / 2, k[1] + kwidth[1] / 2), params)
+                d = model(z, (k[0] + kwidth[0] / 2, k[1] + kwidth[1] / 2), params)
+                results = (a + b + c + d) / 4
+                errors = None
+            else:
+                lower = model(z, k - kwidth / 2, params)
+                upper = model(z, k + kwidth / 2, params)
+                results = (lower + upper) / 2
+                errors = (lower - upper) / 2
         elif self.window_integration_rule == "quad":
+            k = np.asarray(k)
+            kwidth = np.asarray(kwidth)
 
-            def pk_func(k):
-                return model(z, k, params).value
+            if k.ndim == 1:
+
+                def pk_func(k):
+                    return model(z, k, params).value
+
+            else:
+
+                def pk_func(kperp, kpar):
+                    return model(z, (kperp, kpar), params).value
 
             unit = getattr(model(z, k[0], params), "unit", None)
 
             results = []
             errors = []
             for center, width in zip(k, kwidth):
-                result, error = quad(pk_func, center - width / 2, center + width / 2)
+                if k.ndim == 1:
+                    result, error = quad(
+                        pk_func, center - width / 2, center + width / 2
+                    )
+                elif k.ndim == 2:
+                    result, error = dblquad(
+                        pk_func,
+                        center[0] - width[0] / 2,
+                        center[0] + width[0] / 2,
+                        center[1] - width[1] / 2,
+                        center[1] + width[1] / 2,
+                    )
                 results.append(result / width)
                 errors.append(error / width)
 
