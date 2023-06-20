@@ -466,30 +466,58 @@ class DataModelInterface:
                 def pk_func(k):
                     return model(z, k, params).value
 
+                unit = getattr(model(z, k[0], params), "unit", None)
+
             else:
 
                 def pk_func(kperp, kpar):
                     return model(z, (kperp, kpar), params).value
 
-            unit = getattr(model(z, k[0], params), "unit", None)
+                unit = getattr(model(z, k[:, 0], params), "unit", None)
 
             results = []
             errors = []
-            for center, width in zip(k, kwidth):
+            for center, width in zip(k.T, kwidth.T):
                 if k.ndim == 1:
                     result, error = quad(
                         pk_func, center - width / 2, center + width / 2
                     )
                 elif k.ndim == 2:
-                    result, error = dblquad(
-                        pk_func,
-                        center[0] - width[0] / 2,
-                        center[0] + width[0] / 2,
-                        center[1] - width[1] / 2,
-                        center[1] + width[1] / 2,
-                    )
-                results.append(result / width)
-                errors.append(error / width)
+                    # TODO: Better implement this
+                    if width[0] == 0.0:
+
+                        def partial_pk(kpar):
+                            kperp = center[0]
+                            return model(z, (kperp, kpar), params).value
+
+                        result, error = quad(
+                            partial_pk,
+                            a=center[1] - width[1] / 2,
+                            b=center[1] + width[1] / 2,
+                        )
+                    elif width[1] == 0:
+
+                        def partial_pk(kperp):
+                            kpar = center[1]
+                            return model(z, (kperp, kpar), params).value
+
+                        result, error = quad(
+                            partial_pk,
+                            a=center[0] - width[0] / 2,
+                            b=center[0] + width[0] / 2,
+                        )
+                    else:
+                        result, error = dblquad(
+                            pk_func,
+                            center[0] - width[0] / 2,
+                            center[0] + width[0] / 2,
+                            center[1] - width[1] / 2,
+                            center[1] + width[1] / 2,
+                        )
+                result /= np.prod(width, where=width != 0)
+                error /= np.prod(width, where=width != 0)
+                results.append(result)
+                errors.append(result)
 
             results = np.array(results)
             errors = np.array(errors)
@@ -536,7 +564,10 @@ class DataModelInterface:
                 self._kconvert(self.kperp_bins_theory),
                 self._kconvert(self.kpar_bins_theory),
             )
-            kwidth = 0  # TODO: need to do this correctly.
+            kwidth = (
+                self._kconvert(self.kperp_widths_theory),
+                self._kconvert(self.kpar_widths_theory),
+            )
 
         theory_params = self._validate_params(theory_params, self.theory_param_names)
         return self._discretize(self.theory_model, z, k, kwidth, theory_params)

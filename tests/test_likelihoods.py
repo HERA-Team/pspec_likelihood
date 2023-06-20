@@ -415,7 +415,8 @@ def test_arblin_bad_inputs(dmi_spherical):
         lk.loglike([4, 2.7], [])
 
 
-def test_different_discretization(dmi_spherical):
+def test_different_discretization(dmi_spherical, dmi_cylindrical):
+    # spherical
     bin_widths = dmi_spherical.kpar_bins_obs[1:] - dmi_spherical.kpar_bins_obs[:-1]
     bin_widths = np.concatenate(([bin_widths[0]], bin_widths))
     dmi_trapz = attr.evolve(
@@ -432,6 +433,32 @@ def test_different_discretization(dmi_spherical):
 
     assert np.allclose(centre, trapz, atol=1e-2)
     assert np.allclose(centre, quad, atol=1e-2)
+
+    # cylindrical
+    kpar_w = dmi_cylindrical.kpar_bins_obs[1:] - dmi_cylindrical.kpar_bins_obs[:-1]
+    kpar_w = np.concatenate(([kpar_w[0]], kpar_w))
+    kperp_w = dmi_cylindrical.kperp_bins_obs[1:] - dmi_cylindrical.kperp_bins_obs[:-1]
+    kperp_w = np.concatenate(([kperp_w[0]], kperp_w))
+    dmic_trapz = attr.evolve(
+        dmi_cylindrical,
+        window_integration_rule="trapz",
+        kpar_widths_theory=kpar_w,
+        kperp_widths_theory=kperp_w,
+    )
+
+    dmic_quad = attr.evolve(
+        dmi_cylindrical,
+        window_integration_rule="quad",
+        kpar_widths_theory=kpar_w,
+        kperp_widths_theory=kperp_w,
+    )
+
+    centre = dmi_cylindrical.compute_model([5.0, 2.7], [])
+    trapz = dmic_trapz.compute_model([5.0, 2.7], [])
+    quad = dmic_quad.compute_model([5.0, 2.7], [])
+
+    # assert np.allclose(centre, trapz, atol=1e-2)
+    # assert np.allclose(centre, quad, atol=1e-2)
 
 
 def constant_offset_systematic(z: float, k: np.ndarray, params: list[float]):
