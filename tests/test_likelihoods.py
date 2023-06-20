@@ -114,7 +114,6 @@ def test_little_h(uvp1):
 
 
 def test_dmi_validators(uvp1):
-
     kperp = np.linspace(0.01, 0.5, 15)
     kpar = np.linspace(0.01, 0.5, 100)
 
