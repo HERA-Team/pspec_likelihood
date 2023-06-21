@@ -30,6 +30,10 @@ class DataModelInterface:
     (and their associated covariances and window functions)
     along with a theoretical model and calculations of the likelihoods
     given this model that propertly account for the window functions.
+    Note that window function matrix W must properly approximate performing
+    the integral :math:`P_{obs}(b, tau) = \int \int d k_\perp d k_\parallel
+    W(b, \tau, k_\perp, k_\parallel) P_{th}(k_\perp, k_\parallel)`, since
+    the W matrix will directly multiply the theory at the given k samples.
     For now, this container assumes Gaussian measurement errors and
     thus only keeps track of covariances but this may change in the future.
 
@@ -47,10 +51,10 @@ class DataModelInterface:
         array whose first dimension has length equal to the power spectrum, and the
         second dimension has the same length as
         ``kpar_bins_theory``/``kperp_bins_theory``.
-        They must include weight information for the integral, such that
-        P_obs(b, tau) = \int \int dkperp dkpar W(b, tau, kperp, kpar) P_th(kperp, kpar)
-        is equivalent to a matrix multiplication of the W matrix with the P_th
-        vector, computing at (kperp, kpar).
+        The matrix W must properly approximate performing the integral
+        :math:`P_{obs}(b, tau) = \int \int d k_\perp d k_\parallel
+        W(b, \tau, k_\perp, k_\parallel) P_{th}(k_\perp, k_\parallel)`,
+        since the W matrix will directly multiply the theory at the given k samples.
     covariance
         The data covariance matrix. If 2D, must be a square matrix with each dimension
         the same length as ``power_spectrum``. If 1D, the covariance is assumed to be
