@@ -58,7 +58,7 @@ repos:
       args: [--py38-plus]
 
 - repo: https://github.com/commitizen-tools/commitizen
-  rev: 3.4.0
+  rev: 3.5.2
   hooks:
     - id: commitizen
       stages: [commit-msg]
