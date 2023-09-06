@@ -2,7 +2,10 @@
 
 import sys, os
 import time
-from importlib_metadata import version as _version
+try:
+    from importlib.metadata import version as _version
+except ImportError:
+    from importlib_metadata import version as _version
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
