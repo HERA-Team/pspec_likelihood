@@ -237,13 +237,12 @@ def test_exception_no_units():
         verbose=False,
     )
     with pytest.raises(ValueError, match=r"Power Spectrum must be in"):
-        with pytest.warns(UserWarning, match="Converting to Delta^2 in place..."):
-            DataModelInterface.from_uvpspec(
-                uvp,
-                spw=0,
-                theory_model=dummy_theory_model,
-                sys_model=dummy_sys_model,
-            )
+        DataModelInterface.from_uvpspec(
+            uvp,
+            spw=0,
+            theory_model=dummy_theory_model,
+            sys_model=dummy_sys_model,
+        )
 
 
 def test_input_theory_kbins():

@@ -1,7 +1,65 @@
 [build-system]
-requires = ["setuptools>=45", "wheel"]
+requires = ["setuptools>=60", "wheel", "setuptools_scm>=8.0", "numpy"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "pspec-likelihood"
+description = "A flexible likelihood for 21cm power spectrum estimates"
+readme = "README.rst"
+authors = [
+    {name="Steven Murray", email="steven.murray@sns.it"},
+    {name="Adelie Gorce", email="adelie.gorce@universite-paris-saclay.fr"}
+]
+license = {text="MIT"}
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+dependencies = [
+    "hera_pspec",
+    "hera_sim",
+    "pyuvdata",
+    "attrs",
+    "astropy",
+    "numpy",
+    "scipy",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+docs = [
+    "sphinx>=1.7.5",
+    "numpydoc",
+    "nbsphinx",
+    "furo",
+    "ipython"
+]
+tests = [
+    "pytest",
+    "pytest-cov",
+    "pytest-xdist",
+    "pre-commit"
+]
+dev = [
+    "setuptools_scm",
+    "ruff",
+    "pspec-likelihood[docs,tests]"
+]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
