@@ -1,4 +1,5 @@
 """Types to be used throughout the package."""
+
 from __future__ import annotations
 
 from typing import Any, Callable

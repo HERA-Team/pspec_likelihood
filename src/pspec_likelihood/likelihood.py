@@ -1,4 +1,5 @@
 """Primary module defining likelihoods based on HERA power spectra."""
+
 from __future__ import annotations
 
 import warnings
@@ -733,12 +734,16 @@ class GaussianLinearSystematics(PSpecLikelihood):
         # them. "basis" corresponds to "A" in the memo.
         basis = self.linear_systematics_basis_function(
             sys_params,
-            self.model.kperp_bins_theory
-            if self.model.apply_window_to_systematics
-            else self.model.kperp_bins_obs,
-            self.model.kpar_bins_theory
-            if self.model.apply_window_to_systematics
-            else self.model.kpar_bins_obs,
+            (
+                self.model.kperp_bins_theory
+                if self.model.apply_window_to_systematics
+                else self.model.kperp_bins_obs
+            ),
+            (
+                self.model.kpar_bins_theory
+                if self.model.apply_window_to_systematics
+                else self.model.kpar_bins_obs
+            ),
         )
 
         mu_linear = self.get_mu_linear(basis)
