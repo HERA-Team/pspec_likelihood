@@ -1,7 +1,65 @@
 [build-system]
-requires = ["setuptools>=45", "wheel"]
+requires = ["setuptools>=60", "wheel", "setuptools_scm>=8.0", "numpy"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "pspec-likelihood"
+description = "A flexible likelihood for 21cm power spectrum estimates"
+readme = "README.rst"
+authors = [
+    {name="Steven Murray", email="steven.murray@sns.it"},
+    {name="Adelie Gorce", email="adelie.gorce@universite-paris-saclay.fr"}
+]
+license = {text="MIT"}
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+dependencies = [
+    "hera_pspec",
+    "hera_sim",
+    "pyuvdata",
+    "attrs",
+    "astropy",
+    "numpy",
+    "scipy",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+docs = [
+    "sphinx>=1.7.5",
+    "numpydoc",
+    "nbsphinx",
+    "furo",
+    "ipython"
+]
+tests = [
+    "pytest",
+    "pytest-cov",
+    "pytest-xdist",
+    "pre-commit"
+]
+dev = [
+    "setuptools_scm",
+    "ruff",
+    "pspec-likelihood[docs,tests]"
+]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -21,3 +79,55 @@ version_variable = [
 ]
 upload_to_repository = false
 branch = "main"
+
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+extend-select = [
+  "UP",   # pyupgrade
+  "E",    # pycodestyle
+  "W",    # pycodestyle warning
+  "C90",  # mccabe complexity
+  "I",    # isort
+  "N",    # pep8-naming
+  "D",    # docstyle
+  # "ANN"   # type annotations
+  "B",    # bugbear
+  "A",    # builtins
+  "C4",   # comprehensions
+  "DTZ",  # datetime
+  "FA",   # future annotations
+  "PIE",  # flake8-pie
+  "T",    # print statements
+  "PT",   # pytest-style
+  "Q",    # quotes
+  "SIM",  # simplify
+  "PTH",  # use Pathlib
+  "ERA",  # kill commented code
+  "NPY",  # numpy-specific rules
+  "PERF", # performance
+  # "FURB", # refurb
+  "RUF",  # ruff-specific rules
+]
+ignore = [
+    "A003",     # class attribute shadows python builtin
+    "B008",     # function call in argument defaults
+]
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = [
+    "D103",  # ignore missing docstring in tests
+    "T",     # print statements
+]
+"docs/conf.py" = [
+    "A",  # conf.py can shadow builtins
+    "ERA",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = 'numpy'
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15

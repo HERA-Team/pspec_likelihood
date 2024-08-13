@@ -1,4 +1,5 @@
 """Module responsible for computing the likelihood for linear systematics."""
+
 from __future__ import annotations
 
 import warnings
@@ -19,39 +20,39 @@ from .likelihood import PSpecLikelihood
 class LikelihoodLinearSystematic(PSpecLikelihood):
     """Likelihood for the case of arbitrary linear systematic parameters.
 
-    This code assumes that the systematic parameters are linear and enter the
-    likelihood through:
+        This code assumes that the systematic parameters are linear and enter the
+        likelihood through:
+    p
+        .. math:: r′(θNL, θLsys) = d − 𝑚(θ_NL) − a_basis*θ_linearsys
 
-    .. math:: r′(θNL, θLsys) = d − 𝑚(θ_NL) − a_basis*θ_linearsys
+        where d is the data vector, m(θ_NL) is the theory function and
+        a_basis*θ_linearsys are the systematic parameters.
+        The linear systematic parameters are then marginalized over.
+        The likelihood in this code follows that of Tauscher et al. (2021).
 
-    where d is the data vector, m(θ_NL) is the theory function and
-    a_basis*θ_linearsys are the systematic parameters.
-    The linear systematic parameters are then marginalized over.
-    The likelihood in this code follows that of Tauscher et al. (2021).
-
-    Parameters
-    ----------
-    linear_systematics_basis_function
-        Callable function used to compute the linear basis of the linear systematics.
-        This function must take the following parameters as input
-        ``linear_systematic_basis_function(theta_lin, theta_nonlin, kperp_bins_theory)``
-        The output of this function is required to be an ndarray of shape
-        ``sys_params['linear'].shape``.
-    mu_theta
-        The mean of the Gaussian prior on the linear systematic variables.
-        Must be a 1D array of length len(linear_systematics). Defaults to None.
-        If None, the prior on the linear systematics are assumed to be improper uniform.
-    sigma_theta
-        The prior covariance of the linear systematic parameters in the case of a
-        Gaussian prior on the linear systematic parameters. Must be an array of shape
-        ``len(linear systematics) X len(linear_systematics)``.
-        If None, the prior on the linear systematics is assumed to improper uniform.
-    nlinear
-        The number of linear parameters -- not required if ``mu_theta`` or
-        ``sigma_theta`` are given.
-    cov_tolerance
-        Tolerance on the eigenvalues of the covariance to determine if covariance is
-        singular.
+        Parameters
+        ----------
+        linear_systematics_basis_function
+            Callable function used to compute the linear basis of the linear systematics.
+            This function must take the following parameters as input
+            ``linear_systematic_basis_function(theta_lin, theta_nonlin, kperp_bins_theory)``
+            The output of this function is required to be an ndarray of shape
+            ``sys_params['linear'].shape``.
+        mu_theta
+            The mean of the Gaussian prior on the linear systematic variables.
+            Must be a 1D array of length len(linear_systematics). Defaults to None.
+            If None, the prior on the linear systematics are assumed to be improper uniform.
+        sigma_theta
+            The prior covariance of the linear systematic parameters in the case of a
+            Gaussian prior on the linear systematic parameters. Must be an array of shape
+            ``len(linear systematics) X len(linear_systematics)``.
+            If None, the prior on the linear systematics is assumed to improper uniform.
+        nlinear
+            The number of linear parameters -- not required if ``mu_theta`` or
+            ``sigma_theta`` are given.
+        cov_tolerance
+            Tolerance on the eigenvalues of the covariance to determine if covariance is
+            singular.
     """
 
     linear_systematics_basis_function = attr.ib()

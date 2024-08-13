@@ -1,10 +1,12 @@
 """Primary module defining likelihoods based on HERA power spectra."""
+
 from __future__ import annotations
 
 import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import Callable, Sequence
+from typing import Callable
 
 import astropy.cosmology as csm
 import astropy.cosmology.units as cu
@@ -259,7 +261,6 @@ class DataModelInterface:
         # case we use kpar by convention and kperp is set to None.
         obs_use_spherical_k = "Spherically averaged with hera_pspec" in uvp.history
         if obs_use_spherical_k:
-            print("Treating as spherically averaged")
             assert (
                 len(uvp.get_kperps(spw)) == 1
             ), "data says it is spherically averaged but len(uvp.get_kperps(spw)) is >1"
@@ -269,7 +270,6 @@ class DataModelInterface:
             n_perp = 1
             kperp_bins_obs = None
         else:
-            print("Treating as cylindrical PS")
             # Otherwise get kperp from uvp. Note that get_kperps() returns
             # all the baselines, including the redundant ones that are
             # combined in the power spectrum data.
@@ -565,7 +565,6 @@ class PSpecLikelihood(ABC):
     @abstractmethod
     def loglike(self, theory_params, sys_params) -> float:
         """Compute the log-likelihood."""
-        pass
 
     def validate(self):
         """Validation of a particular likelihood.
@@ -573,7 +572,6 @@ class PSpecLikelihood(ABC):
         In particular, this is useful for ensuring that the data model follows certain
         rules that might be particular to the likelihood (eg. diagonal covariance).
         """
-        pass
 
     @cached_property
     def power_spectrum(self) -> tp.PowerType:
@@ -721,11 +719,9 @@ class GaussianLinearSystematics(PSpecLikelihood):
 
     def get_mu_linear(self, basis: np.ndarray) -> tuple[float]:
         """Compute the posterior mean of linear parameters."""
-        pass
 
     def get_sigma_linear(self, basis) -> tuple[float]:
         """Compute the posterior covariance of the linear parameters."""
-        pass
 
     def loglike(self, theory_params, sys_params) -> float:
         """Compute the log likelihood."""
@@ -733,12 +729,16 @@ class GaussianLinearSystematics(PSpecLikelihood):
         # them. "basis" corresponds to "A" in the memo.
         basis = self.linear_systematics_basis_function(
             sys_params,
-            self.model.kperp_bins_theory
-            if self.model.apply_window_to_systematics
-            else self.model.kperp_bins_obs,
-            self.model.kpar_bins_theory
-            if self.model.apply_window_to_systematics
-            else self.model.kpar_bins_obs,
+            (
+                self.model.kperp_bins_theory
+                if self.model.apply_window_to_systematics
+                else self.model.kperp_bins_obs
+            ),
+            (
+                self.model.kpar_bins_theory
+                if self.model.apply_window_to_systematics
+                else self.model.kpar_bins_obs
+            ),
         )
 
         mu_linear = self.get_mu_linear(basis)
