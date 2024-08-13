@@ -1,4 +1,4 @@
-"""Test loading an UVPspec file"""
+"""Test loading an UVPspec file."""
 
 from pathlib import Path
 
@@ -279,7 +279,7 @@ def test_input_theory_kbins():
 
 
 def test_IDR2_file(uvp1):  # noqa: N802
-    """Load from tests/data/pspec_h1c_idr2_field{}.h5"""
+    """Load from tests/data/pspec_h1c_idr2_field{}.h5."""
     dmi1 = DataModelInterface.from_uvpspec(
         uvp1,
         spw=1,
