@@ -1,4 +1,5 @@
 """Test loading an UVPspec file"""
+
 from pathlib import Path
 
 import astropy.units as un
