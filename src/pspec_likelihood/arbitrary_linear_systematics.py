@@ -1,4 +1,5 @@
 """Module responsible for computing the likelihood for linear systematics."""
+
 from __future__ import annotations
 
 import warnings
