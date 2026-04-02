@@ -1,4 +1,5 @@
-"""Test loading an UVPspec file"""
+"""Test loading an UVPspec file."""
+
 from __future__ import annotations
 
 import astropy.units as un
@@ -21,9 +22,7 @@ def powerlaw_eor_spherical(z: float, k: np.ndarray, params: list[float]) -> np.n
     return k**3 / (2 * np.pi**2) * amplitude * un.mK**2 * (1.0 + z) / k**index
 
 
-def powerlaw_eor_spherical_littleh(
-    z: float, k: np.ndarray, params: list[float]
-) -> np.ndarray:
+def powerlaw_eor_spherical_littleh(z: float, k: np.ndarray, params: list[float]) -> np.ndarray:
     amplitude, index = params
     return (
         (k * Planck18.h) ** 3
@@ -45,7 +44,7 @@ def powerlaw_eor_cylindrical(
 
 
 def test_like(uvp1):
-    """Load from tests/data/pspec_h1c_idr2_field{}.h5"""
+    """Load from tests/data/pspec_h1c_idr2_field{}.h5."""
     dmi1 = DataModelInterface.from_uvpspec(
         uvp1,
         spw=1,
@@ -53,12 +52,8 @@ def test_like(uvp1):
         sys_model=None,
         theory_uses_spherical_k=True,
     )
-    lk_normal = MarginalizedLinearPositiveSystematics(
-        model=dmi1, set_negative_to_zero=False
-    )
-    lk_zeroed = MarginalizedLinearPositiveSystematics(
-        model=dmi1, set_negative_to_zero=True
-    )
+    lk_normal = MarginalizedLinearPositiveSystematics(model=dmi1, set_negative_to_zero=False)
+    lk_zeroed = MarginalizedLinearPositiveSystematics(model=dmi1, set_negative_to_zero=True)
     with pytest.warns(UserWarning, match="Ignoring data in positions"):
         result_normal = lk_normal.loglike([0, -0.1], [])
 
@@ -77,7 +72,7 @@ def test_like(uvp1):
 
 
 def test_little_h(uvp1):
-    """Load from tests/data/pspec_h1c_idr2_field{}.h5"""
+    """Load from tests/data/pspec_h1c_idr2_field{}.h5."""
     dmi1 = DataModelInterface.from_uvpspec(
         uvp1,
         spw=1,
@@ -127,7 +122,7 @@ def test_dmi_validators(uvp1):
     covariance = np.diag(k**3 * 1e5)
     window_function = np.eye(len(k))
 
-    with pytest.raises(ValueError) as e:
+    with pytest.raises(ValueError, match="window_function must be"):
         DataModelInterface(
             cosmology=cosmology.Planck18,
             redshift=z,
@@ -140,10 +135,8 @@ def test_dmi_validators(uvp1):
             theory_uses_spherical_k=True,
             theory_model=powerlaw_eor_spherical,
         )
-        print(e)
-        assert str(e.value) == ("window_function must be " "(Nk_obs, Nk_th) matrix")
 
-    with pytest.raises(ValueError) as e:
+    with pytest.raises(ValueError, match="kpar_bins_obs must have same shape"):
         DataModelInterface(
             cosmology=cosmology.Planck18,
             redshift=z,
@@ -156,12 +149,8 @@ def test_dmi_validators(uvp1):
             theory_uses_spherical_k=True,
             theory_model=powerlaw_eor_spherical,
         )
-        print(e)
-        assert str(e.value) == (
-            "kpar_bins_obs must have same shape as the power spectrum"
-        )
 
-    with pytest.raises(ValueError) as e:
+    with pytest.raises(ValueError, match="covariance must be Nk"):
         DataModelInterface(
             cosmology=cosmology.Planck18,
             redshift=z,
@@ -174,8 +163,6 @@ def test_dmi_validators(uvp1):
             theory_uses_spherical_k=True,
             theory_model=powerlaw_eor_spherical,
         )
-        print(e)
-        assert str(e.value) == ("covariance must be Nk*Nk matrix or length-Nk vector")
 
 
 # theory_uses_little_h is False by default
@@ -451,14 +438,7 @@ def test_with_sys_model_not_apply_window(dmi_spherical):
 def powerlaw_eor_spherical_dictparams(
     z: float, k: np.ndarray, params: dict[str, float]
 ) -> np.ndarray:
-    return (
-        k**3
-        / (2 * np.pi**2)
-        * params["amplitude"]
-        * un.mK**2
-        * (1.0 + z)
-        / k ** params["index"]
-    )
+    return k**3 / (2 * np.pi**2) * params["amplitude"] * un.mK**2 * (1.0 + z) / k ** params["index"]
 
 
 def test_with_paramnames(dmi_spherical):

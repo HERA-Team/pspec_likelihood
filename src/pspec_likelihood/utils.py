@@ -1,9 +1,11 @@
 """Miscellaneous utility functions."""
+
 from __future__ import annotations
 
 import warnings
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -26,7 +28,7 @@ def normalize_wf(arr) -> np.array:
     else:
         warnings.warn(
             "Had to normalize window_function. \
-            See utils.normalize_wf."
+            See utils.normalize_wf.", stacklevel=2
         )
         norm_arr = np.zeros(arr.shape)
         np.divide(arr, sum_per_bin, where=sum_per_bin != 0, out=norm_arr)

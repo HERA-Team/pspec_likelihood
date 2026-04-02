@@ -1,3 +1,4 @@
+"""Tests for pspec_likelihood.types module."""
 import attr
 import pytest
 from astropy import units as un
@@ -12,7 +13,7 @@ def test_is_unit():
 
 
 def test_vld_unit():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="super_terrible"):
         tp.vld_unit("super_terrible")
 
     @attr.define
@@ -37,9 +38,7 @@ def test_vld_unit():
     class _B:
         temp_field = attr.ib(validator=tp.vld_unit(un.mK))
 
-    with pytest.raises(
-        un.UnitConversionError, match="temp_field not convertible to mK"
-    ):
+    with pytest.raises(un.UnitConversionError, match="temp_field not convertible to mK"):
         _B(temp_field=3 * un.m)
 
     b = _B(3 * un.mK)

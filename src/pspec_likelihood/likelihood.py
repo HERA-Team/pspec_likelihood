@@ -1,10 +1,11 @@
 """Primary module defining likelihoods based on HERA power spectra."""
+
 from __future__ import annotations
 
 import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Sequence
 from copy import deepcopy
-from typing import Callable, Sequence
 
 import astropy.cosmology as csm
 import astropy.cosmology.units as cu
@@ -105,21 +106,15 @@ class DataModelInterface:
     """
 
     redshift: float = attr.ib(converter=float)
-    power_spectrum: tp.PowerType = attr.ib(
-        validator=vld_unit(un.mK**2), eq=tp.cmp_array
-    )
+    power_spectrum: tp.PowerType = attr.ib(validator=vld_unit(un.mK**2), eq=tp.cmp_array)
     window_function: np.ndarray = attr.ib(eq=tp.cmp_array, converter=wf_cvt)
-    covariance: tp.CovarianceType = attr.ib(
-        validator=vld_unit(un.mK**4), eq=tp.cmp_array
-    )
+    covariance: tp.CovarianceType = attr.ib(validator=vld_unit(un.mK**4), eq=tp.cmp_array)
     theory_model: Callable = attr.ib(validator=attr.validators.is_callable())
     sys_model: Callable | None = attr.ib(
         default=None, validator=attr.validators.optional(attr.validators.is_callable())
     )
 
-    cosmology: csm.FLRW = attr.ib(
-        csm.Planck18, validator=attr.validators.instance_of(csm.FLRW)
-    )
+    cosmology: csm.FLRW = attr.ib(csm.Planck18, validator=attr.validators.instance_of(csm.FLRW))
     kpar_bins_obs: tp.Wavenumber = attr.ib(eq=tp.cmp_array)
     kperp_bins_obs: tp.Wavenumber | None = attr.ib(None, eq=tp.cmp_array)
     kpar_bins_theory: tp.Wavenumber = attr.ib(eq=tp.cmp_array)
@@ -132,9 +127,7 @@ class DataModelInterface:
     theory_param_names: Sequence[str] | None = attr.ib(
         None, converter=attr.converters.optional(tuple)
     )
-    sys_param_names: Sequence[str] | None = attr.ib(
-        None, converter=attr.converters.optional(tuple)
-    )
+    sys_param_names: Sequence[str] | None = attr.ib(None, converter=attr.converters.optional(tuple))
     apply_window_to_systematics: bool = attr.ib(True, converter=bool)
 
     @kpar_bins_obs.validator
@@ -143,9 +136,9 @@ class DataModelInterface:
         if not np.isrealobj(val):
             raise TypeError(f"{att.name} must be real!")
 
-        vld_unit(
-            cu.littleh / un.Mpc, equivalencies=csm.units.with_H0(self.cosmology.H0)
-        )(self, att, val)
+        vld_unit(cu.littleh / un.Mpc, equivalencies=csm.units.with_H0(self.cosmology.H0))(
+            self, att, val
+        )
 
         if val.shape != self.power_spectrum.shape:
             raise ValueError(f"{att.name} must have same shape as the power spectrum")
@@ -191,7 +184,7 @@ class DataModelInterface:
 
     @cached_property
     def spherical_kbins_obs(self) -> tp.Wavenumber:
-        """The spherical k bins of the observation (the edges)."""
+        """Return the spherical k bins of the observation (the edges)."""
         if self.kperp_bins_obs is not None:
             return np.sqrt(self.kpar_bins_obs**2 + self.kperp_bins_obs**2)
         else:
@@ -199,7 +192,7 @@ class DataModelInterface:
 
     @cached_property
     def spherical_kbins_theory(self) -> tp.Wavenumber:
-        """The spherical k bins of the theory (edges)."""
+        """Return the spherical k bins of the theory (edges)."""
         if self.kperp_bins_theory is not None:
             return np.sqrt(self.kpar_bins_theory**2 + self.kperp_bins_theory**2)
         else:
@@ -240,7 +233,7 @@ class DataModelInterface:
 
         # Note that the following is a little brittle.
         if " k^3 / (2pi^2)" not in uvp.norm_units:
-            warnings.warn("Converting to Delta^2 in place...")
+            warnings.warn("Converting to Delta^2 in place...", stacklevel=2)
             uvp.convert_to_deltasq(inplace=True)
 
         if "kpar_bins_theory" in kwargs or "kperp_bins_theory" in kwargs:
@@ -259,17 +252,15 @@ class DataModelInterface:
         # case we use kpar by convention and kperp is set to None.
         obs_use_spherical_k = "Spherically averaged with hera_pspec" in uvp.history
         if obs_use_spherical_k:
-            print("Treating as spherically averaged")
-            assert (
-                len(uvp.get_kperps(spw)) == 1
-            ), "data says it is spherically averaged but len(uvp.get_kperps(spw)) is >1"
-            assert np.isclose(
-                uvp.get_kperps(spw)[0], 0, atol=1e-11, rtol=0
-            ), "data says it is spherically averaged but uvp.get_kperps(spw)[0] is >> 0"
+            assert len(uvp.get_kperps(spw)) == 1, (
+                "data says it is spherically averaged but len(uvp.get_kperps(spw)) is >1"
+            )
+            assert np.isclose(uvp.get_kperps(spw)[0], 0, atol=1e-11, rtol=0), (
+                "data says it is spherically averaged but uvp.get_kperps(spw)[0] is >> 0"
+            )
             n_perp = 1
             kperp_bins_obs = None
         else:
-            print("Treating as cylindrical PS")
             # Otherwise get kperp from uvp. Note that get_kperps() returns
             # all the baselines, including the redundant ones that are
             # combined in the power spectrum data.
@@ -279,7 +270,7 @@ class DataModelInterface:
                     "The UVPSpec object is not redundantly averaged. "
                     "This may result in poor speed due to having more individual kperps"
                     " than statistically necessary. However, results should be the "
-                    "same. Continuing..."
+                    "same. Continuing...", stacklevel=2
                 )
 
             n_perp = len(kperps)
@@ -292,8 +283,7 @@ class DataModelInterface:
         # flatten the shape (N_perp, N_para) to (N_perp*N_para), index such
         # that k_par changes the fastest.
         poltuples = [
-            hp.uvpspec_utils.polpair_int2tuple(x, pol_strings=True)
-            for x in uvp.polpair_array
+            hp.uvpspec_utils.polpair_int2tuple(x, pol_strings=True) for x in uvp.polpair_array
         ]
         pol = poltuples[polpair_index]
         if len(uvp.polpair_array) > 1:
@@ -301,7 +291,7 @@ class DataModelInterface:
                 "There is more than one polpair in your UVPSpec object. "
                 f"Using polpair '{pol}', but you might want to make sure this is what "
                 f"you want. Possible values are: {poltuples}, set the one you want by"
-                " setting polpair_index"
+                " setting polpair_index", stacklevel=2
             )
         keys = [x for x in uvp.get_all_keys() if (x[0] == spw and x[2] == pol)]
 
@@ -342,7 +332,7 @@ class DataModelInterface:
             # Overwrite potential input k_bins_theory
             warnings.warn(
                 "Using kperp_bins_theory and kpar_bins_theory "
-                "intrinsic to the exact window functions."
+                "intrinsic to the exact window functions.", stacklevel=2
             )
             kperp_bins_theory = np.repeat(kperps_wf, kparas_wf.size)
             kpar_bins_theory = np.tile(kparas_wf, kperps_wf.size)
@@ -508,9 +498,9 @@ class DataModelInterface:
         """
         if isinstance(params, dict):
             if names is not None:
-                assert set(names) == set(
-                    params.keys()
-                ), "input parameters don't match parameters of the likelihood"
+                assert set(names) == set(params.keys()), (
+                    "input parameters don't match parameters of the likelihood"
+                )
             return params
         else:
             if names is None:
@@ -521,7 +511,7 @@ class DataModelInterface:
                     "input params is not of same length as given param_names "
                     f"({len(names)} vs {len(params)})"
                 )
-            return dict(zip(names, params))
+            return dict(zip(names, params, strict=False))
 
     def compute_model(
         self,
@@ -565,15 +555,13 @@ class PSpecLikelihood(ABC):
     @abstractmethod
     def loglike(self, theory_params, sys_params) -> float:
         """Compute the log-likelihood."""
-        pass
 
-    def validate(self):
-        """Validation of a particular likelihood.
+    def validate(self):  # noqa: B027
+        """Validate the likelihood.
 
         In particular, this is useful for ensuring that the data model follows certain
         rules that might be particular to the likelihood (eg. diagonal covariance).
         """
-        pass
 
     @cached_property
     def power_spectrum(self) -> tp.PowerType:
@@ -597,12 +585,12 @@ class PSpecLikelihood(ABC):
 
     @cached_property
     def data_mask(self):
-        """A mask where data is properly defined and usable."""
+        """Return the mask where data is properly defined and usable."""
         mask = self.variance != 0 * un.mK**4
         if np.any(~mask):
             warnings.warn(
-                f"Ignoring data in positions {np.where(~mask)} "
-                "as the variance is zero"
+                f"Ignoring data in positions {np.where(~mask)} as the variance is zero",
+                stacklevel=2,
             )
         return mask
 
@@ -637,33 +625,29 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
     def validate(self):
         """Ensure the model has diagonal covariance and no systematics model."""
         if not np.all(
-            np.isclose(
-                self.model.covariance - np.diag(np.diag(self.model.covariance)), 0
-            )
+            np.isclose(self.model.covariance - np.diag(np.diag(self.model.covariance)), 0)
         ):
             warnings.warn(
                 f"Your covariance matrix is not diagonal. The {self.__class__.__name__}"
-                " class requires diagonal covariance. Forcing it..."
+                " class requires diagonal covariance. Forcing it...", stacklevel=2
             )
 
         if self.model.sys_model is not None:
-            raise ValueError(
-                f"sys_model must be None for the {self.__class__.__name__} class."
-            )
+            raise ValueError(f"sys_model must be None for the {self.__class__.__name__} class.")
 
     @cached_property
     def variance(self):
-        """The diagonal of the covariance matrix."""
+        """Return the diagonal of the covariance matrix."""
         return np.diag(self.model.covariance)
 
     @cached_property
     def data_mask(self):
-        """A mask where data is properly defined and usable."""
+        """Return the mask where data is properly defined and usable."""
         mask = self.variance != 0 * un.mK**4
         if np.any(~mask):
             warnings.warn(
-                f"Ignoring data in positions {np.where(~mask)} "
-                "as the variance is zero"
+                f"Ignoring data in positions {np.where(~mask)} as the variance is zero",
+                stacklevel=2,
             )
         return mask
 
@@ -675,9 +659,7 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         data = self.power_spectrum[self.data_mask]
         residuals = data - model
 
-        residuals_over_errors = (
-            residuals / np.sqrt(2 * self.variance[self.data_mask])
-        ).value
+        residuals_over_errors = (residuals / np.sqrt(2 * self.variance[self.data_mask])).value
 
         # We have 1 + erf(x) == 1 - erf(-x) == erfc(-x)
         # The erfc function is MUCH more stable at high x than erf is at large negative
@@ -721,11 +703,9 @@ class GaussianLinearSystematics(PSpecLikelihood):
 
     def get_mu_linear(self, basis: np.ndarray) -> tuple[float]:
         """Compute the posterior mean of linear parameters."""
-        pass
 
     def get_sigma_linear(self, basis) -> tuple[float]:
         """Compute the posterior covariance of the linear parameters."""
-        pass
 
     def loglike(self, theory_params, sys_params) -> float:
         """Compute the log likelihood."""
@@ -745,9 +725,7 @@ class GaussianLinearSystematics(PSpecLikelihood):
         sig_linear = self.get_sigma_linear(basis)
 
         model = self.model.compute_model(theory_params, tuple(sys_params) + mu_linear)
-        normal = multivariate_normal(
-            mean=self.power_spectrum, cov=self.model.covariance
-        )
+        normal = multivariate_normal(mean=self.power_spectrum, cov=self.model.covariance)
 
         prior = multivariate_normal(
             mean=self.linear_systematics_mean, cov=self.linear_systematics_cov
@@ -784,12 +762,8 @@ def check_uvp(uvp):
     try:
         uvp.get_cov(key)
     except AttributeError as e:
-        raise AttributeError(
-            "Covariance matrix is not defined on the UVPspec object"
-        ) from e
+        raise AttributeError("Covariance matrix is not defined on the UVPspec object") from e
     try:
         uvp.get_window_function(key)
     except AttributeError as e:
-        raise AttributeError(
-            "Window functions are not defined on the UVPspec object"
-        ) from e
+        raise AttributeError("Window functions are not defined on the UVPspec object") from e
