@@ -1,4 +1,5 @@
 """Pytest fixtures for pspec_likelihood tests."""
+
 from pathlib import Path
 
 import hera_pspec as hp

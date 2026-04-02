@@ -171,9 +171,7 @@ def test_exact_wf():
 
 def test_exception_no_time_avg():
     uvp = prepare_uvp_object(time_avg=False)
-    with pytest.raises(
-        ValueError, match="The UVPSpec object has not been fully time-averaged"
-    ):
+    with pytest.raises(ValueError, match="The UVPSpec object has not been fully time-averaged"):
         DataModelInterface.from_uvpspec(
             uvp=uvp,
             spw=0,
