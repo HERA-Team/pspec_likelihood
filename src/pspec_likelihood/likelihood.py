@@ -270,7 +270,8 @@ class DataModelInterface:
                     "The UVPSpec object is not redundantly averaged. "
                     "This may result in poor speed due to having more individual kperps"
                     " than statistically necessary. However, results should be the "
-                    "same. Continuing...", stacklevel=2
+                    "same. Continuing...",
+                    stacklevel=2,
                 )
 
             n_perp = len(kperps)
@@ -291,7 +292,8 @@ class DataModelInterface:
                 "There is more than one polpair in your UVPSpec object. "
                 f"Using polpair '{pol}', but you might want to make sure this is what "
                 f"you want. Possible values are: {poltuples}, set the one you want by"
-                " setting polpair_index", stacklevel=2
+                " setting polpair_index",
+                stacklevel=2,
             )
         keys = [x for x in uvp.get_all_keys() if (x[0] == spw and x[2] == pol)]
 
@@ -332,7 +334,8 @@ class DataModelInterface:
             # Overwrite potential input k_bins_theory
             warnings.warn(
                 "Using kperp_bins_theory and kpar_bins_theory "
-                "intrinsic to the exact window functions.", stacklevel=2
+                "intrinsic to the exact window functions.",
+                stacklevel=2,
             )
             kperp_bins_theory = np.repeat(kperps_wf, kparas_wf.size)
             kpar_bins_theory = np.tile(kparas_wf, kperps_wf.size)
@@ -629,7 +632,8 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         ):
             warnings.warn(
                 f"Your covariance matrix is not diagonal. The {self.__class__.__name__}"
-                " class requires diagonal covariance. Forcing it...", stacklevel=2
+                " class requires diagonal covariance. Forcing it...",
+                stacklevel=2,
             )
 
         if self.model.sys_model is not None:

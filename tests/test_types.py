@@ -1,4 +1,5 @@
 """Tests for pspec_likelihood.types module."""
+
 import attr
 import pytest
 from astropy import units as un
