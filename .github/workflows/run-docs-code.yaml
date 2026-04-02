@@ -1,0 +1,49 @@
+name: Run Demo
+
+on:
+  push:
+  pull_request:
+    branches:
+      - 'main'
+
+jobs:
+  tests:
+    env:
+      ENV_NAME: tests
+      PYTHON: ${{ matrix.python-version }}
+      OS: ${{ matrix.os }}
+    name: Testing
+    #    needs: [linter]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.14"]
+    steps:
+      - uses: actions/checkout@master
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install
+        run:  uv sync --locked --all-extras --dev
+
+      - name: Install ipykernel
+        run: uv run python -m ipykernel install --user --name pspeclk --display-name "pspeclk"
+
+      - name: Run Notebook
+        run: |
+          uv run papermill -k pspeclk docs/tutorials/getting_started.ipynb output-getting_started.ipynb
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: getting_started
+          path: output-getting_started.ipynb
