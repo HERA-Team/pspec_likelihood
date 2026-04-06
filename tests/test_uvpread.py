@@ -1,5 +1,6 @@
 """Test loading an UVPspec file."""
 
+import warnings
 from pathlib import Path
 
 import astropy.units as un
@@ -11,6 +12,9 @@ from pyuvdata import UVData
 from pspec_likelihood import DataModelInterface
 
 DATA_PATH = Path(__file__).parent / "data"
+IGNORE_AUTOCORR_FIXUP = pytest.mark.filterwarnings(
+    r"ignore:Fixing auto-correlations to be be real-only.*:UserWarning"
+)
 
 
 def dummy_theory_model(z, k):
@@ -32,31 +36,48 @@ def prepare_uvp_object(
     # Based on https://github.com/HERA-Team/pspec_likelihood/blob/api_idr2like/
     # dvlpt/tests_data_file.ipynb
     uvd = UVData()
-    uvd.read_uvh5(DATA_PATH / "data_calibrated_testfile.h5")
+    uvd.read_uvh5(DATA_PATH / "data_calibrated_testfile_updated.h5")
     # beam
     beamfile = DATA_PATH / "HERA_NF_pstokes_power.beamfits"
-    uvb = hp.pspecbeam.PSpecBeamUV(str(beamfile))
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            r"Unknown polarization basis",
+        )
+        warnings.filterwarnings("ignore", r"The mount_type parameter must be set")
+        uvb = hp.pspecbeam.PSpecBeamUV(str(beamfile))
 
     # Create a new PSpecData object, and don't forget to feed the beam object
     ds = hp.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
-    ds.Jy_to_mK()
+
+    with warnings.catch_warnings():
+        # Can remove this once https://github.com/HERA-Team/hera_pspec/issues/432
+        # is resolved.
+        warnings.filterwarnings("ignore", "Cannot convert dset")
+        ds.Jy_to_mK()
+
     # choose baselines
     baselines1, baselines2, _blpairs = hp.utils.construct_blpairs(
         uvd.get_antpairs(), exclude_permutations=True, exclude_auto_bls=True
     )
-    # compute ps
-    uvp = ds.pspec(
-        baselines1,
-        baselines2,
-        dsets=(0, 1),
-        pols=[("pI", "pI")],
-        spw_ranges=(175, 195),
-        taper="bh",
-        verbose=False,
-        store_cov=store_cov,
-        store_window=store_window,
-        baseline_tol=100.0,
-    )
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", r"The Telescope.x_orientation attribute is deprecated")
+        warnings.filterwarnings("ignore", r"Producing time-uniform covariance matrices")
+        # compute ps
+        uvp = ds.pspec(
+            baselines1,
+            baselines2,
+            dsets=(0, 1),
+            pols=[("pI", "pI")],
+            spw_ranges=(175, 195),
+            taper="bh",
+            verbose=False,
+            store_cov=store_cov,
+            store_window=store_window,
+            baseline_tol=100.0,
+        )
+
     print(
         "There are",
         uvp.Nblpairs,
@@ -191,6 +212,7 @@ def test_warning_not_redundantly_averaged():
         )
 
 
+@IGNORE_AUTOCORR_FIXUP
 def test_exception_no_units():
     datafile = DATA_PATH / "zen.2458116.31939.HH.uvh5"
     uvd = UVData()
@@ -250,6 +272,7 @@ def test_input_theory_kbins():
         )
 
 
+@pytest.mark.filterwarnings("ignore:Had to normalize window_function")
 def test_IDR2_file(uvp1):  # noqa: N802
     """Load from tests/data/pspec_h1c_idr2_field{}.h5."""
     dmi1 = DataModelInterface.from_uvpspec(

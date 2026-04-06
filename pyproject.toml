@@ -52,6 +52,11 @@ tests = [
     "pytest>=3.5.1",
     "pytest-cov>=2.5.1",
 ]
+doctests = [
+    {include-group = "tests"},
+    "papermill",
+    "ipykernel"
+]
 dev = [
     {include-group = "docs"},
     {include-group = "tests"},

@@ -19,19 +19,12 @@ from pspec_likelihood import (
 
 def powerlaw_eor_spherical(z: float, k: np.ndarray, params: list[float]) -> np.ndarray:
     amplitude, index = params
-    return k**3 / (2 * np.pi**2) * amplitude * un.mK**2 * (1.0 + z) / k**index
+    return k ** (3 - index) / (2 * np.pi**2) * amplitude * un.mK**2 * (1.0 + z)
 
 
 def powerlaw_eor_spherical_littleh(z: float, k: np.ndarray, params: list[float]) -> np.ndarray:
     amplitude, index = params
-    return (
-        (k * Planck18.h) ** 3
-        / (2 * np.pi**2)
-        * amplitude
-        * un.mK**2
-        * (1.0 + z)
-        / (k * Planck18.h) ** index
-    )
+    return (k * Planck18.h) ** (3 - index) / (2 * np.pi**2) * amplitude * un.mK**2 * (1.0 + z)
 
 
 def powerlaw_eor_cylindrical(
@@ -40,9 +33,11 @@ def powerlaw_eor_cylindrical(
     amplitude, index = params
     kperp, kpar = kcyl
     k = np.sqrt(kperp**2 + kpar**2)
-    return k**3 / (2 * np.pi**2) * amplitude * un.mK**2 * (1.0 + z) / k**index
+    return k ** (3 - index) / (2 * np.pi**2) * amplitude * un.mK**2 * (1.0 + z)
 
 
+@pytest.mark.filterwarnings("ignore:Had to normalize window_function")
+@pytest.mark.filterwarnings("ignore:Your covariance matrix is not diagonal")
 def test_like(uvp1):
     """Load from tests/data/pspec_h1c_idr2_field{}.h5."""
     dmi1 = DataModelInterface.from_uvpspec(
@@ -54,7 +49,9 @@ def test_like(uvp1):
     )
     lk_normal = MarginalizedLinearPositiveSystematics(model=dmi1, set_negative_to_zero=False)
     lk_zeroed = MarginalizedLinearPositiveSystematics(model=dmi1, set_negative_to_zero=True)
-    with pytest.warns(UserWarning, match="Ignoring data in positions"):
+    with (
+        pytest.warns(UserWarning, match="Ignoring data in positions"),
+    ):
         result_normal = lk_normal.loglike([0, -0.1], [])
 
     with pytest.warns(UserWarning, match="Ignoring data in positions"):
@@ -68,9 +65,11 @@ def test_like(uvp1):
         "Wrong test IDR2 likelihood result",
         result_zeroed,
     )
-    return result_normal, lk_zeroed
 
 
+@pytest.mark.filterwarnings("ignore:Had to normalize window_function")
+@pytest.mark.filterwarnings("ignore:Your covariance matrix is not diagonal")
+@pytest.mark.filterwarnings("ignore:Ignoring data in positions")
 def test_little_h(uvp1):
     """Load from tests/data/pspec_h1c_idr2_field{}.h5."""
     dmi1 = DataModelInterface.from_uvpspec(
@@ -448,7 +447,7 @@ def test_with_paramnames(dmi_spherical):
         theory_model=powerlaw_eor_spherical_dictparams,
     )
 
-    assert np.array_equal(
+    np.testing.assert_allclose(
         dmi_names.compute_model({"amplitude": 5.0, "index": 2.7}, []),
         dmi_spherical.compute_model([5.0, 2.7], []),
     )
