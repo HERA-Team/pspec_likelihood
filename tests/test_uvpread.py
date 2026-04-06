@@ -36,7 +36,7 @@ def prepare_uvp_object(
     # Based on https://github.com/HERA-Team/pspec_likelihood/blob/api_idr2like/
     # dvlpt/tests_data_file.ipynb
     uvd = UVData()
-    uvd.read_uvh5(DATA_PATH / "data_calibrated_testfile_updated.h5")
+    uvd.read_uvh5(DATA_PATH / "data_calibrated_testfile.h5")
     # beam
     beamfile = DATA_PATH / "HERA_NF_pstokes_power.beamfits"
     with warnings.catch_warnings():

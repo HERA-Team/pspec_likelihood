@@ -62,7 +62,9 @@ dev = [
     {include-group = "tests"},
     "setuptools_scm",
     "prek",
-    "ruff"
+    "ruff",
+    "ipykernel>=7.2.0",
+    "pip>=26.0.1",
 ]
 
 

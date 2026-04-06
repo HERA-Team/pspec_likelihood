@@ -41,7 +41,7 @@ jobs:
 
       - name: Run Notebook
         run: |
-          uv run papermill -k pspeclk docs/tutorials/getting_started.ipynb output-getting_started.ipynb
+          uv run papermill -k pspeclk -p path_to_uvp "dvlpt/" docs/tutorials/getting_started.ipynb output-getting_started.ipynb
 
       - uses: actions/upload-artifact@v7
         if: always()
