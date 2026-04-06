@@ -10,7 +10,7 @@ from copy import deepcopy
 import astropy.cosmology as csm
 import astropy.cosmology.units as cu
 import astropy.units as un
-import attr
+import attrs
 import hera_pspec as hp
 import numpy as np
 from cached_property import cached_property
@@ -23,7 +23,7 @@ from .types import vld_unit
 from .utils import normalize_wf as wf_cvt
 
 
-@attr.s(kw_only=True)
+@attrs.define(kw_only=True, frozen=True, slots=False)
 class DataModelInterface:
     r"""Container for power spectrum measurements and models.
 
@@ -105,32 +105,36 @@ class DataModelInterface:
         systematics.
     """
 
-    redshift: float = attr.ib(converter=float)
-    power_spectrum: tp.PowerType = attr.ib(validator=vld_unit(un.mK**2), eq=tp.cmp_array)
-    kpar_bins_obs: tp.Wavenumber = attr.ib(eq=tp.cmp_array)
+    redshift: float = attrs.field(converter=float)
+    power_spectrum: tp.PowerType = attrs.field(validator=vld_unit(un.mK**2), eq=tp.cmp_array)
+    kpar_bins_obs: tp.Wavenumber = attrs.field(eq=tp.cmp_array)
 
-    window_function: np.ndarray = attr.ib(eq=tp.cmp_array, converter=wf_cvt)
-    covariance: tp.CovarianceType = attr.ib(validator=vld_unit(un.mK**4), eq=tp.cmp_array)
-    theory_model: Callable = attr.ib(validator=attr.validators.is_callable())
-    sys_model: Callable | None = attr.ib(
-        default=None, validator=attr.validators.optional(attr.validators.is_callable())
+    window_function: np.ndarray = attrs.field(eq=tp.cmp_array, converter=wf_cvt)
+    covariance: tp.CovarianceType = attrs.field(validator=vld_unit(un.mK**4), eq=tp.cmp_array)
+    theory_model: Callable = attrs.field(validator=attrs.validators.is_callable())
+    sys_model: Callable | None = attrs.field(
+        default=None, validator=attrs.validators.optional(attrs.validators.is_callable())
     )
 
-    cosmology: csm.FLRW = attr.ib(csm.Planck18, validator=attr.validators.instance_of(csm.FLRW))
-
-    kperp_bins_obs: tp.Wavenumber | None = attr.ib(None, eq=tp.cmp_array)
-    kpar_bins_theory: tp.Wavenumber = attr.ib(eq=tp.cmp_array)
-    kperp_bins_theory: tp.Wavenumber | None = attr.ib()
-
-    theory_uses_little_h: bool = attr.ib(default=False, converter=bool)
-    theory_uses_spherical_k: bool = attr.ib(default=False, converter=bool)
-    obs_use_spherical_k: bool = attr.ib(default=False, converter=bool)
-
-    theory_param_names: Sequence[str] | None = attr.ib(
-        None, converter=attr.converters.optional(tuple)
+    cosmology: csm.FLRW = attrs.field(
+        default=csm.Planck18, validator=attrs.validators.instance_of(csm.FLRW)
     )
-    sys_param_names: Sequence[str] | None = attr.ib(None, converter=attr.converters.optional(tuple))
-    apply_window_to_systematics: bool = attr.ib(True, converter=bool)
+
+    kperp_bins_obs: tp.Wavenumber | None = attrs.field(default=None, eq=tp.cmp_array)
+    kpar_bins_theory: tp.Wavenumber = attrs.field(eq=tp.cmp_array)
+    kperp_bins_theory: tp.Wavenumber | None = attrs.field()
+
+    theory_uses_little_h: bool = attrs.field(default=False, converter=bool)
+    theory_uses_spherical_k: bool = attrs.field(default=False, converter=bool)
+    obs_use_spherical_k: bool = attrs.field(default=False, converter=bool)
+
+    theory_param_names: Sequence[str] | None = attrs.field(
+        default=None, converter=attrs.converters.optional(tuple)
+    )
+    sys_param_names: Sequence[str] | None = attrs.field(
+        default=None, converter=attrs.converters.optional(tuple)
+    )
+    apply_window_to_systematics: bool = attrs.field(default=True, converter=bool)
 
     @kpar_bins_obs.validator
     # @kpar_bins_theory.validator
@@ -533,7 +537,7 @@ class DataModelInterface:
             return self.apply_window_function(theory) + sys
 
 
-@attr.s(kw_only=True)
+@attrs.define(kw_only=True, frozen=True, slots=False)
 class PSpecLikelihood(ABC):
     """Base class for likelihoods.
 
@@ -550,8 +554,8 @@ class PSpecLikelihood(ABC):
         Whether to treat negative power spectrum values as zero.
     """
 
-    model: DataModelInterface = attr.ib()
-    set_negative_to_zero: bool = attr.ib(default=False, converter=bool)
+    model: DataModelInterface = attrs.field()
+    set_negative_to_zero: bool = attrs.field(default=False, converter=bool)
 
     def __attrs_post_init__(self):
         """Do stuff after initialization."""
@@ -600,7 +604,7 @@ class PSpecLikelihood(ABC):
         return mask
 
 
-@attr.s(kw_only=True)
+@attrs.define(kw_only=True, frozen=True, slots=False)
 class Gaussian(PSpecLikelihood):
     """The simplest Gaussian likelihood."""
 
@@ -615,7 +619,7 @@ class Gaussian(PSpecLikelihood):
         return normal.logpdf(model[self.data_mask])
 
 
-@attr.s(kw_only=True)
+@attrs.define(kw_only=True, frozen=True, slots=False)
 class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
     """The likelihood used in IDR2 analysis.
 
@@ -687,7 +691,7 @@ class MarginalizedLinearPositiveSystematics(PSpecLikelihood):
         return np.sum(loglike)
 
 
-@attr.s(kw_only=True)
+@attrs.define(kw_only=True, frozen=True, slots=False)
 class GaussianLinearSystematics(PSpecLikelihood):
     """A Gaussian likelihood where some systematics are assumed to be linear.
 
@@ -703,9 +707,9 @@ class GaussianLinearSystematics(PSpecLikelihood):
         The prior covariance of the linear systematics.
     """
 
-    linear_systematics_basis_function: Callable = attr.ib()
-    linear_systematics_mean: np.ndarray = attr.ib()
-    linear_systematics_cov: np.ndarray = attr.ib()
+    linear_systematics_basis_function: Callable = attrs.field()
+    linear_systematics_mean: np.ndarray = attrs.field()
+    linear_systematics_cov: np.ndarray = attrs.field()
 
     def get_mu_linear(self, basis: np.ndarray) -> tuple[float]:
         """Compute the posterior mean of linear parameters."""

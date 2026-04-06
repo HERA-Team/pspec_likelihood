@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import warnings
 
-import attr
+import attrs
 import numpy as np
 from astropy import units as un
 from cached_property import cached_property
@@ -16,7 +16,7 @@ from . import types as tp
 from .likelihood import PSpecLikelihood
 
 
-@attr.s
+@attrs.define(frozen=True)
 class LikelihoodLinearSystematic(PSpecLikelihood):
     """Likelihood for the case of arbitrary linear systematic parameters.
 
@@ -55,11 +55,11 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
         singular.
     """
 
-    linear_systematics_basis_function = attr.ib()
-    mu_theta: np.ndarray | None = attr.ib(None)
-    nlinear: int = attr.ib()
-    sigma_theta: np.ndarray = attr.ib()
-    cov_tolerance: float = attr.ib(default=10, converter=float)
+    linear_systematics_basis_function = attrs.field()
+    mu_theta: np.ndarray | None = attrs.field(default=None)
+    nlinear: int = attrs.field()
+    sigma_theta: np.ndarray = attrs.field()
+    cov_tolerance: float = attrs.field(default=10, converter=float)
 
     @cached_property
     def covariance_inv(self):
