@@ -27,13 +27,13 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Astronomy",
 ]
 dependencies = [
-    "hera_pspec",
+    "hera_pspec>=0.5.0",
     "hera_sim",
-    "pyuvdata",
+    "pyuvdata>=3.2.5",
     "attrs",
     "cached_property",
     "astropy",
-    "numpy",
+    "numpy>=2.0",
     "scipy",
 ]
 

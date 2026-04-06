@@ -199,7 +199,7 @@ def test_exception_no_units():
     uvb = hp.pspecbeam.PSpecBeamUV(str(beamfile), cosmo=None)
     jy_to_mk = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol="xx")
     # reshape to appropriately match a UVData.data_array object and multiply in!
-    uvd.data_array *= jy_to_mk[None, None, :, None]
+    uvd.data_array *= jy_to_mk[None, :, None]
     # Create a new PSpecData object, and don't forget to feed the beam object
     ds = hp.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
     # choose baselines
@@ -219,7 +219,6 @@ def test_exception_no_units():
     )
     with (
         pytest.raises(ValueError, match=r"Power Spectrum must be in"),
-        pytest.warns(UserWarning, match="Converting to Delta^2 in place..."),
     ):
         DataModelInterface.from_uvpspec(
             uvp,

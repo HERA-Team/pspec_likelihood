@@ -30,8 +30,8 @@ class DataModelInterface:
     This class keeps track of power-spectrum measurements
     (and their associated covariances and window functions)
     along with a theoretical model and calculations of the likelihoods
-    given this model that propertly account for the window functions.
-    Note that window function matrix W must properly approximate performing
+    given this model that properly account for the window functions.
+    Note that the window function matrix W must properly approximate performing
     the integral :math:`P_{obs}(b, tau) = \int \int d k_\perp d k_\parallel
     W(b, \tau, k_\perp, k_\parallel) P_{th}(k_\perp, k_\parallel)`, since
     the W matrix will directly multiply the theory at the given k samples.
@@ -107,6 +107,8 @@ class DataModelInterface:
 
     redshift: float = attr.ib(converter=float)
     power_spectrum: tp.PowerType = attr.ib(validator=vld_unit(un.mK**2), eq=tp.cmp_array)
+    kpar_bins_obs: tp.Wavenumber = attr.ib(eq=tp.cmp_array)
+
     window_function: np.ndarray = attr.ib(eq=tp.cmp_array, converter=wf_cvt)
     covariance: tp.CovarianceType = attr.ib(validator=vld_unit(un.mK**4), eq=tp.cmp_array)
     theory_model: Callable = attr.ib(validator=attr.validators.is_callable())
@@ -115,7 +117,7 @@ class DataModelInterface:
     )
 
     cosmology: csm.FLRW = attr.ib(csm.Planck18, validator=attr.validators.instance_of(csm.FLRW))
-    kpar_bins_obs: tp.Wavenumber = attr.ib(eq=tp.cmp_array)
+
     kperp_bins_obs: tp.Wavenumber | None = attr.ib(None, eq=tp.cmp_array)
     kpar_bins_theory: tp.Wavenumber = attr.ib(eq=tp.cmp_array)
     kperp_bins_theory: tp.Wavenumber | None = attr.ib()
