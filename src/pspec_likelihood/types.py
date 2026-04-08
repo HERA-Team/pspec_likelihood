@@ -1,7 +1,9 @@
 """Types to be used throughout the package."""
+
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import attr
 import numpy as np
@@ -26,9 +28,7 @@ def is_unit(unit: str) -> bool:
         return False
 
 
-def vld_unit(
-    unit: str | u.Unit, equivalencies=()
-) -> Callable[[Any, attr.Attribute, Any], None]:
+def vld_unit(unit: str | u.Unit, equivalencies=()) -> Callable[[Any, attr.Attribute, Any], None]:
     """Attr validator to check physical type."""
     utype = is_unit(unit)
     if not utype:
@@ -41,14 +41,11 @@ def vld_unit(
             raise TypeError(f"{att.name} must be an astropy Quantity!")
 
         if utype and not val.unit.is_equivalent(unit, equivalencies):
-            raise u.UnitConversionError(
-                f"{att.name} not convertible to {unit}. Got {val.unit}"
-            )
+            raise u.UnitConversionError(f"{att.name} not convertible to {unit}. Got {val.unit}")
 
         if not utype and val.unit.physical_type != unit:
             raise u.UnitConversionError(
-                f"{att.name} must have physical type of '{unit}'. "
-                f"Got '{val.unit.physical_type}'"
+                f"{att.name} must have physical type of '{unit}'. Got '{val.unit.physical_type}'"
             )
 
     return _check_type

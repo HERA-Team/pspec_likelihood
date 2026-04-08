@@ -1,12 +1,25 @@
 """The PSpec Likelihood Package."""
-from . import likelihood
-from .arbitrary_linear_systematics import LikelihoodLinearSystematic
+
+from importlib.metadata import PackageNotFoundError, version
+
+from . import likelihood as likelihood
+from .arbitrary_linear_systematics import LikelihoodLinearSystematic as LikelihoodLinearSystematic
 from .likelihood import (
-    DataModelInterface,
-    Gaussian,
-    GaussianLinearSystematics,
-    MarginalizedLinearPositiveSystematics,
+    DataModelInterface as DataModelInterface,
+)
+from .likelihood import (
+    Gaussian as Gaussian,
+)
+from .likelihood import (
+    GaussianLinearSystematics as GaussianLinearSystematics,
+)
+from .likelihood import (
+    MarginalizedLinearPositiveSystematics as MarginalizedLinearPositiveSystematics,
 )
 
-# This gets managed by python-semantic-release, don't touch!
-__version__ = "0.2.0"
+try:
+    __version__ = version("pspec_likelihood")
+except PackageNotFoundError:  # pragma: no cover
+    __version__ = "unknown"
+finally:
+    del version, PackageNotFoundError

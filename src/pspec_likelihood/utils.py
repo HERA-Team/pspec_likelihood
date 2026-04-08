@@ -1,9 +1,11 @@
 """Miscellaneous utility functions."""
+
 from __future__ import annotations
 
 import warnings
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -18,15 +20,16 @@ def make_list_of_paths(x: str | Path | Sequence[str | Path]) -> list[Path]:
     return [Path(xx) for xx in listify(x)]
 
 
-def normalize_wf(arr) -> np.array:
+def normalize_wf(arr: np.ndarray) -> np.ndarray:
     """Check normalization of window functions and convert to np array."""
     sum_per_bin = np.sum(arr, axis=1)[:, None]
     if np.allclose(sum_per_bin[sum_per_bin != 0.0], 1.0):
-        return np.array(arr)
+        return np.asarray(arr)
     else:
         warnings.warn(
             "Had to normalize window_function. \
-            See utils.normalize_wf."
+            See utils.normalize_wf.",
+            stacklevel=2,
         )
         norm_arr = np.zeros(arr.shape)
         np.divide(arr, sum_per_bin, where=sum_per_bin != 0, out=norm_arr)

@@ -1,4 +1,6 @@
-"""Test loading an UVPspec file"""
+"""Test loading an UVPspec file."""
+
+import warnings
 from pathlib import Path
 
 import astropy.units as un
@@ -10,6 +12,9 @@ from pyuvdata import UVData
 from pspec_likelihood import DataModelInterface
 
 DATA_PATH = Path(__file__).parent / "data"
+IGNORE_AUTOCORR_FIXUP = pytest.mark.filterwarnings(
+    r"ignore:Fixing auto-correlations to be be real-only.*:UserWarning"
+)
 
 
 def dummy_theory_model(z, k):
@@ -34,27 +39,45 @@ def prepare_uvp_object(
     uvd.read_uvh5(DATA_PATH / "data_calibrated_testfile.h5")
     # beam
     beamfile = DATA_PATH / "HERA_NF_pstokes_power.beamfits"
-    uvb = hp.pspecbeam.PSpecBeamUV(str(beamfile))
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            r"Unknown polarization basis",
+        )
+        warnings.filterwarnings("ignore", r"The mount_type parameter must be set")
+        uvb = hp.pspecbeam.PSpecBeamUV(str(beamfile))
+
     # Create a new PSpecData object, and don't forget to feed the beam object
     ds = hp.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
-    ds.Jy_to_mK()
+
+    with warnings.catch_warnings():
+        # Can remove this once https://github.com/HERA-Team/hera_pspec/issues/432
+        # is resolved.
+        warnings.filterwarnings("ignore", "Cannot convert dset")
+        ds.Jy_to_mK()
+
     # choose baselines
-    baselines1, baselines2, blpairs = hp.utils.construct_blpairs(
+    baselines1, baselines2, _blpairs = hp.utils.construct_blpairs(
         uvd.get_antpairs(), exclude_permutations=True, exclude_auto_bls=True
     )
-    # compute ps
-    uvp = ds.pspec(
-        baselines1,
-        baselines2,
-        dsets=(0, 1),
-        pols=[("pI", "pI")],
-        spw_ranges=(175, 195),
-        taper="bh",
-        verbose=False,
-        store_cov=store_cov,
-        store_window=store_window,
-        baseline_tol=100.0,
-    )
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", r"The Telescope.x_orientation attribute is deprecated")
+        warnings.filterwarnings("ignore", r"Producing time-uniform covariance matrices")
+        # compute ps
+        uvp = ds.pspec(
+            baselines1,
+            baselines2,
+            dsets=(0, 1),
+            pols=[("pI", "pI")],
+            spw_ranges=(175, 195),
+            taper="bh",
+            verbose=False,
+            store_cov=store_cov,
+            store_window=store_window,
+            baseline_tol=100.0,
+        )
+
     print(
         "There are",
         uvp.Nblpairs,
@@ -66,11 +89,9 @@ def prepare_uvp_object(
     print("Furthermore we have", uvp.data_array[0].shape[1], "kparas (freq).")
     print("Thus the data array has shape", uvp.data_array[0].shape)
     # get redundant groups
-    blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
+    blpair_groups, _blpair_lens, _ = uvp.get_red_blpairs()
     # there are baseline pairs that do not belong to a redundant group
-    extra_blpairs = set(uvp.blpair_array) - {
-        blp for blpg in blpair_groups for blp in blpg
-    }
+    extra_blpairs = set(uvp.blpair_array) - {blp for blpg in blpair_groups for blp in blpg}
     # only keep blpairs in redundant groups
     uvp.select(blpairs=[blp for blpg in blpair_groups for blp in blpg])
     print(
@@ -96,9 +117,7 @@ def prepare_uvp_object(
             npix=301,
             cosmo=uvp.cosmo,
         )
-        uvp.get_exact_window_functions(
-            ftbeam=gaussian_beam, inplace=True, verbose=False
-        )
+        uvp.get_exact_window_functions(ftbeam=gaussian_beam, inplace=True, verbose=False)
     # perform redundant average
     if redundant_avg:
         uvp.average_spectra(blpair_groups=blpair_groups)
@@ -140,29 +159,21 @@ def test_cylindrical_ps():
 def test_missing_attributes():
     # covariance
     uvp1 = prepare_uvp_object(spherical_avg=False, store_cov=False)
-    with pytest.raises(AttributeError) as e:
+    with pytest.raises(AttributeError, match="Covariance matrix is not defined"):
         DataModelInterface.from_uvpspec(
             uvp=uvp1,
             spw=0,
             theory_model=dummy_theory_model,
             theory_uses_spherical_k=True,
         )
-        print(e)
-        assert str(e.value) == (
-            "Covariance matrix is not defined on the UVPspec object"
-        )
     # window functions
     uvp2 = prepare_uvp_object(spherical_avg=False, store_window=False)
-    with pytest.raises(AttributeError) as e:
+    with pytest.raises(AttributeError, match="Window functions are not defined"):
         DataModelInterface.from_uvpspec(
             uvp=uvp2,
             spw=0,
             theory_model=dummy_theory_model,
             theory_uses_spherical_k=True,
-        )
-        print(e)
-        assert str(e.value) == (
-            "Window functions are not defined on the UVPspec object"
         )
 
 
@@ -181,27 +192,18 @@ def test_exact_wf():
 
 def test_exception_no_time_avg():
     uvp = prepare_uvp_object(time_avg=False)
-    with pytest.raises(ValueError) as e:
+    with pytest.raises(ValueError, match="The UVPSpec object has not been fully time-averaged"):
         DataModelInterface.from_uvpspec(
             uvp=uvp,
             spw=0,
             theory_model=dummy_theory_model,
             theory_uses_spherical_k=True,
-        )
-        print(e)
-        assert str(e.value) == (
-            "The UVPSpec object has not been fully time-"
-            "averaged. Please time-average with uvp."
-            "average_spectra(time_avg=True) before passing to "
-            "DataModelInterface.from_uvpspec"
         )
 
 
 def test_warning_not_redundantly_averaged():
     uvp = prepare_uvp_object(redundant_avg=False, spherical_avg=False)
-    with pytest.warns(
-        UserWarning, match="The UVPSpec object is not redundantly averaged."
-    ):
+    with pytest.warns(UserWarning, match="The UVPSpec object is not redundantly averaged."):
         DataModelInterface.from_uvpspec(
             uvp=uvp,
             spw=0,
@@ -210,6 +212,7 @@ def test_warning_not_redundantly_averaged():
         )
 
 
+@IGNORE_AUTOCORR_FIXUP
 def test_exception_no_units():
     datafile = DATA_PATH / "zen.2458116.31939.HH.uvh5"
     uvd = UVData()
@@ -218,11 +221,11 @@ def test_exception_no_units():
     uvb = hp.pspecbeam.PSpecBeamUV(str(beamfile), cosmo=None)
     jy_to_mk = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol="xx")
     # reshape to appropriately match a UVData.data_array object and multiply in!
-    uvd.data_array *= jy_to_mk[None, None, :, None]
+    uvd.data_array *= jy_to_mk[None, :, None]
     # Create a new PSpecData object, and don't forget to feed the beam object
     ds = hp.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
     # choose baselines
-    baselines1, baselines2, blpairs = hp.utils.construct_blpairs(
+    baselines1, baselines2, _blpairs = hp.utils.construct_blpairs(
         uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
     )
     # compute ps
@@ -236,20 +239,21 @@ def test_exception_no_units():
         store_cov=True,
         verbose=False,
     )
-    with pytest.raises(ValueError, match=r"Power Spectrum must be in"):
-        with pytest.warns(UserWarning, match="Converting to Delta^2 in place..."):
-            DataModelInterface.from_uvpspec(
-                uvp,
-                spw=0,
-                theory_model=dummy_theory_model,
-                sys_model=dummy_sys_model,
-            )
+    with (
+        pytest.raises(ValueError, match=r"Power Spectrum must be in"),
+    ):
+        DataModelInterface.from_uvpspec(
+            uvp,
+            spw=0,
+            theory_model=dummy_theory_model,
+            sys_model=dummy_sys_model,
+        )
 
 
 def test_input_theory_kbins():
     uvp = prepare_uvp_object(spherical_avg=True)
     # test error if kperp_bins_theory is fed
-    with pytest.raises(ValueError) as e:
+    with pytest.raises(ValueError, match="Cannot feed theory bins to method"):
         DataModelInterface.from_uvpspec(
             uvp=uvp,
             spw=0,
@@ -257,13 +261,8 @@ def test_input_theory_kbins():
             theory_uses_spherical_k=True,
             kperp_bins_theory=np.linspace(0.01, 0.1, 40),
         )
-        print(e)
-        assert str(e.value) == (
-            "Cannot feed theory bins to method. They are defined by "
-            "the window functions of the UVPSpec object."
-        )
     # test error if kpar_bins_theory is fed
-    with pytest.raises(ValueError) as e:
+    with pytest.raises(ValueError, match="Cannot feed theory bins to method"):
         DataModelInterface.from_uvpspec(
             uvp=uvp,
             spw=0,
@@ -271,15 +270,11 @@ def test_input_theory_kbins():
             theory_uses_spherical_k=True,
             kpar_bins_theory=np.linspace(0.01, 0.1, 40),
         )
-        print(e)
-        assert str(e.value) == (
-            "Cannot feed theory bins to method. They are defined by "
-            "the window functions of the UVPSpec object."
-        )
 
 
+@pytest.mark.filterwarnings("ignore:Had to normalize window_function")
 def test_IDR2_file(uvp1):  # noqa: N802
-    """Load from tests/data/pspec_h1c_idr2_field{}.h5"""
+    """Load from tests/data/pspec_h1c_idr2_field{}.h5."""
     dmi1 = DataModelInterface.from_uvpspec(
         uvp1,
         spw=1,

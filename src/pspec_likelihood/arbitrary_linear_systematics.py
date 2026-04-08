@@ -1,9 +1,10 @@
 """Module responsible for computing the likelihood for linear systematics."""
+
 from __future__ import annotations
 
 import warnings
 
-import attr
+import attrs
 import numpy as np
 from astropy import units as un
 from cached_property import cached_property
@@ -15,14 +16,14 @@ from . import types as tp
 from .likelihood import PSpecLikelihood
 
 
-@attr.s
+@attrs.define(frozen=True)
 class LikelihoodLinearSystematic(PSpecLikelihood):
     """Likelihood for the case of arbitrary linear systematic parameters.
 
     This code assumes that the systematic parameters are linear and enter the
     likelihood through:
 
-    .. math:: r′(θNL, θLsys) = d − 𝑚(θ_NL) − a_basis*θ_linearsys
+    .. math:: r'(θNL, θLsys) = d - m(θ_NL) - a_basis*θ_linearsys
 
     where d is the data vector, m(θ_NL) is the theory function and
     a_basis*θ_linearsys are the systematic parameters.
@@ -54,20 +55,20 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
         singular.
     """
 
-    linear_systematics_basis_function = attr.ib()
-    mu_theta: np.ndarray | None = attr.ib(None)
-    nlinear: int = attr.ib()
-    sigma_theta: np.ndarray = attr.ib()
-    cov_tolerance: float = attr.ib(default=10, converter=float)
+    linear_systematics_basis_function = attrs.field()
+    mu_theta: np.ndarray | None = attrs.field(default=None)
+    nlinear: int = attrs.field()
+    sigma_theta: np.ndarray = attrs.field()
+    cov_tolerance: float = attrs.field(default=10, converter=float)
 
     @cached_property
     def covariance_inv(self):
-        """Computes inverse of covariance."""
+        """Compute the inverse of the covariance."""
         return inverse(self.model.covariance)
 
     @cached_property
     def is_improper_uniform(self) -> bool:
-        """Checks for improper uniform priors."""
+        """Check for improper uniform priors."""
         return self.mu_theta is None
 
     @nlinear.default
@@ -95,34 +96,32 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
 
     @cached_property
     def sigma_theta_inv(self) -> np.ndarray:
-        """Computes the inverse of the theta covariances."""
+        """Compute the inverse of the theta covariances."""
         return inverse(self.sigma_theta)
 
     @cached_property
     def compute_mn_prior(self):
-        """Computes the multivariate normal prior."""
+        """Compute the multivariate normal prior."""
         return stats.multivariate_normal(mean=self.mu_theta, cov=self.sigma_theta)
 
     @cached_property
     def compute_mn_loglike(self):
-        """Computes the multivariate normal for loglike."""
+        """Compute the multivariate normal for loglike."""
         return stats.multivariate_normal(cov=self.model.covariance)
 
     def compute_sigma_linear(self, basis: tp.PowerType) -> np.ndarray:
-        """Computes sigma_linear given a basis."""
-        a_sigma_a = matrix_multiply(
-            basis.T, matrix_multiply(self.covariance_inv, basis)
-        ).to_value("")
+        """Compute sigma_linear given a basis."""
+        a_sigma_a = matrix_multiply(basis.T, matrix_multiply(self.covariance_inv, basis)).to_value(
+            ""
+        )
 
         return inverse(self.sigma_theta_inv + a_sigma_a)
 
     def compute_mu_linear(
         self, basis: tp.PowerType, sigma_linear: np.ndarray, resid: tp.PowerType
     ) -> np.ndarray:
-        """Computes mu_linear given a basis and sigma_linear."""
-        a_sigma_r = matrix_multiply(
-            basis.T, matrix_multiply(self.covariance_inv, resid)
-        )
+        """Compute mu_linear given a basis and sigma_linear."""
+        a_sigma_r = matrix_multiply(basis.T, matrix_multiply(self.covariance_inv, resid))
         if not self.is_improper_uniform:
             a_sigma_r += matrix_multiply(self.sigma_theta_inv, self.mu_theta)
 
@@ -140,9 +139,7 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
             sys_params, self.model.kperp_bins_obs, self.model.kpar_bins_obs
         )
 
-        if not isinstance(a_basis, un.Quantity) or not a_basis.unit.is_equivalent(
-            un.mK**2
-        ):
+        if not isinstance(a_basis, un.Quantity) or not a_basis.unit.is_equivalent(un.mK**2):
             raise ValueError(
                 "The function linear_systematics_basis_function must return a "
                 "power-like quantity (in equivalently mK^2)"
@@ -174,11 +171,9 @@ class LikelihoodLinearSystematic(PSpecLikelihood):
 
         loglikelihood = np.sum(self.compute_mn_loglike.logpdf(rprime))
 
-        loglikelihood_eff = (
-            0.5 * np.linalg.slogdet(sigma_linear)[1] + prior + loglikelihood
-        )
+        loglikelihood_eff = 0.5 * np.linalg.slogdet(sigma_linear)[1] + prior + loglikelihood
 
         if not np.isfinite(loglikelihood_eff):
-            warnings.warn("Non-finite likelihood")
+            warnings.warn("Non-finite likelihood", stacklevel=2)
 
         return loglikelihood_eff

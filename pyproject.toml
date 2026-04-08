@@ -1,6 +1,72 @@
 [build-system]
-requires = ["setuptools>=45", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[project]
+name = "pspec_likelihood"
+description = "A likelihood based on UVPSpec objects"
+authors = [{ name = "HERA-Team" }]
+license = { text = "MIT" }
+readme = { file = "README.rst", content-type = "text/x-rst" }
+dynamic = ["version"]
+urls = { Homepage = "https://github.com/hera-team/pspec_likelihood", Documentation = "https://pspec_likelihood.readthedocs.org" }
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+dependencies = [
+    "hera_pspec>=0.5.0",
+    "hera_sim",
+    "pyuvdata>=3.2.5",
+    "attrs",
+    "cached_property",
+    "astropy",
+    "numpy>=2.0",
+    "scipy",
+]
+# 3.14 compataibility is waiting on pyuvdata: https://github.com/RadioAstronomySoftwareGroup/pyuvdata/issues/1658
+requires-python = ">=3.11,<3.14"
+
+[dependency-groups]
+docs = [
+    "Sphinx>=1.7.5",
+    "numpydoc>=0.8.0",
+    "nbsphinx",
+    "furo",
+    "ipython",
+]
+tests = [
+    "coverage>=4.5.1",
+    "pytest>=3.5.1",
+    "pytest-cov>=2.5.1",
+]
+doctests = [
+    {include-group = "tests"},
+    "papermill",
+    "ipykernel"
+]
+dev = [
+    {include-group = "docs"},
+    {include-group = "tests"},
+    "setuptools_scm",
+    "prek",
+    "ruff",
+    "ipykernel>=7.2.0",
+    "pip>=26.0.1",
+]
+
 
 
 [tool.pytest.ini_options]
@@ -15,9 +81,75 @@ norecursedirs = [
     ".tox",
 ]
 
-[tool.semantic_release]
-version_variable = [
-    'src/pspec_likelihood/__init__.py:__version__',
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = [
+  "UP",   # pyupgrade
+  "E",    # pycodestyle
+  "W",    # pycodestyle warning
+  "C90",  # mccabe complexity
+  "I",    # isort
+  "N",    # pep8-naming
+  "D",    # docstyle
+  "B",    # bugbear
+  "A",    # builtins
+  "C4",   # comprehensions
+  "DTZ",  # datetime
+  "FA",   # future annotations
+  "PIE",  # flake8-pie
+  "T",    # print statements
+  "PT",   # pytest-style
+  "Q",    # quotes
+  "SIM",  # simplify
+  # "PTH",  # use Pathlib
+  "ERA",  # kill commented code
+  "NPY",  # numpy-specific rules
+  "PERF", # performance
+  "RUF",  # ruff-specific rules
 ]
-upload_to_repository = false
-branch = "main"
+ignore = [
+    # "DTZ007",   # use %z in strptime
+    # "A003",     # class attribute shadows python builtin
+    # "B008",     # function call in argument defaults
+    # "N802",     # TODO: remove this (function name should be lower-case)
+    # "B019",     # no using lru_cache on methods
+    # "G004",     # logging uses f-string
+    # "D107",     # no docstring in __init__
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = [
+    "D103",  # ignore missing docstring in tests
+    "DTZ",   # ignore datetime in tests
+    "T",     # print statements
+]
+"docs/conf.py" = [
+    "A",  # conf.py can shadow builtins
+    "ERA",
+]
+"docs/**/*.ipynb" = [
+    "T",      # print statements
+    "N",      # naming conventions (physics variables like Q, T, R use uppercase)
+    "D",      # docstrings (not expected in notebook cells)
+    "ERA001", # commented-out code (common in exploratory notebooks)
+    "NPY002", # legacy np.random API (tutorials may use old API intentionally)
+]
+"dvlpt/**/*.ipynb" = [
+    "T",      # print statements
+    "N",      # naming conventions (physics variables)
+    "D",      # docstrings
+    "ERA001", # commented-out code
+    "NPY002", # legacy np.random API
+    "F403",   # star imports common in exploratory notebooks
+    "F405",   # may-be-undefined from star imports
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = 'numpy'
+property-decorators = ['property', 'functools.cached_property']
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
