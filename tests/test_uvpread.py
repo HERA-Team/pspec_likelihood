@@ -186,7 +186,7 @@ def test_exact_wf():
     assert np.shape(dmi.kpar_bins_obs) == (40,)  # right shape
     assert np.shape(dmi.kperp_bins_obs) == (40,)  # right shape
     print(dmi.kpar_bins_obs.shape, dmi.window_function.shape)
-    assert np.shape(dmi.kpar_bins_obs) != np.shape(dmi.kpar_bins_theory)  #
+    assert np.shape(dmi.kpar_bins_obs) != np.shape(dmi.kpar_bins_theory)
     return dmi
 
 
