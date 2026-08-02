@@ -1,6 +1,7 @@
 """Test loading an UVPspec file."""
 
 import warnings
+from contextlib import contextmanager
 from pathlib import Path
 
 import astropy.units as un
@@ -15,6 +16,36 @@ DATA_PATH = Path(__file__).parent / "data"
 IGNORE_AUTOCORR_FIXUP = pytest.mark.filterwarnings(
     r"ignore:Fixing auto-correlations to be be real-only.*:UserWarning"
 )
+# from_uvpspec() intentionally warns and auto-converts whenever it's fed a
+# UVPSpec not already in Delta^2 units, which is the case for uvp fixtures
+# built by prepare_uvp_object() below.
+IGNORE_DELTASQ_CONVERSION = pytest.mark.filterwarnings(
+    r"ignore:Converting to Delta\^2 in place\.\.\.:UserWarning"
+)
+
+
+@contextmanager
+def ignore_known_hera_pspec_warnings():
+    """Suppress warnings that come from hera_pspec/pyuvdata internals, not us.
+
+    These test fixture files predate metadata fields pyuvdata now expects
+    (e.g. mount_type, x_orientation), and hera_pspec.PSpecData.pspec() itself
+    triggers a couple of warnings unrelated to anything pspec_likelihood
+    controls. Grouped here so `pytest -W error` doesn't trip on them.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", r"Unknown polarization basis")
+        warnings.filterwarnings("ignore", r"The mount_type parameter must be set")
+        warnings.filterwarnings("ignore", r"The Telescope.x_orientation attribute is deprecated")
+        warnings.filterwarnings("ignore", r"Producing time-uniform covariance matrices")
+        warnings.filterwarnings("ignore", r"datetime.datetime.utcnow\(\) is deprecated")
+        # hera_pspec casts the (complex) window function array straight to
+        # float64 without discarding the imaginary part explicitly. Fixed
+        # upstream in https://github.com/HERA-Team/hera_pspec/pull/484 but not
+        # yet released to PyPI (still on 0.5.0). Remove once we can bump the
+        # hera_pspec pin past that fix.
+        warnings.filterwarnings("ignore", category=np.exceptions.ComplexWarning)
+        yield
 
 
 def dummy_theory_model(z, k):
@@ -39,12 +70,7 @@ def prepare_uvp_object(
     uvd.read_uvh5(DATA_PATH / "data_calibrated_testfile.h5")
     # beam
     beamfile = DATA_PATH / "HERA_NF_pstokes_power.beamfits"
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            r"Unknown polarization basis",
-        )
-        warnings.filterwarnings("ignore", r"The mount_type parameter must be set")
+    with ignore_known_hera_pspec_warnings():
         uvb = hp.pspecbeam.PSpecBeamUV(str(beamfile))
 
     # Create a new PSpecData object, and don't forget to feed the beam object
@@ -61,9 +87,7 @@ def prepare_uvp_object(
         uvd.get_antpairs(), exclude_permutations=True, exclude_auto_bls=True
     )
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", r"The Telescope.x_orientation attribute is deprecated")
-        warnings.filterwarnings("ignore", r"Producing time-uniform covariance matrices")
+    with ignore_known_hera_pspec_warnings():
         # compute ps
         uvp = ds.pspec(
             baselines1,
@@ -134,6 +158,8 @@ def prepare_uvp_object(
         return uvp
 
 
+@IGNORE_DELTASQ_CONVERSION
+@pytest.mark.filterwarnings("ignore:Had to normalize window_function")
 def test_spherical_ps():
     uvp = prepare_uvp_object()
     dmi = DataModelInterface.from_uvpspec(
@@ -142,9 +168,9 @@ def test_spherical_ps():
     assert np.shape(dmi.covariance) == (40, 40)  # right shape
     assert np.shape(dmi.kpar_bins_obs) == (40,)  # right shape
     assert dmi.kperp_bins_obs is None  # data should be sperically averaged
-    return dmi
 
 
+@IGNORE_DELTASQ_CONVERSION
 def test_cylindrical_ps():
     uvp = prepare_uvp_object(spherical_avg=False)
     dmi = DataModelInterface.from_uvpspec(
@@ -153,7 +179,6 @@ def test_cylindrical_ps():
     assert np.shape(dmi.covariance) == (40, 40)  # right shape
     assert np.shape(dmi.kpar_bins_obs) == (40,)  # right shape
     assert np.shape(dmi.kperp_bins_obs) == (40,)  # right shape
-    return dmi
 
 
 def test_missing_attributes():
@@ -177,6 +202,11 @@ def test_missing_attributes():
         )
 
 
+@IGNORE_DELTASQ_CONVERSION
+@pytest.mark.filterwarnings(
+    "ignore:Using kperp_bins_theory and kpar_bins_theory intrinsic to the exact window functions."
+)
+@pytest.mark.filterwarnings("ignore:Had to normalize window_function")
 def test_exact_wf():
     uvp = prepare_uvp_object(spherical_avg=False, exact_wf=True)
     dmi = DataModelInterface.from_uvpspec(
@@ -187,7 +217,6 @@ def test_exact_wf():
     assert np.shape(dmi.kperp_bins_obs) == (40,)  # right shape
     print(dmi.kpar_bins_obs.shape, dmi.window_function.shape)
     assert np.shape(dmi.kpar_bins_obs) != np.shape(dmi.kpar_bins_theory)
-    return dmi
 
 
 def test_exception_no_time_avg():
@@ -201,6 +230,7 @@ def test_exception_no_time_avg():
         )
 
 
+@IGNORE_DELTASQ_CONVERSION
 def test_warning_not_redundantly_averaged():
     uvp = prepare_uvp_object(redundant_avg=False, spherical_avg=False)
     with pytest.warns(UserWarning, match="The UVPSpec object is not redundantly averaged."):
@@ -218,7 +248,8 @@ def test_exception_no_units():
     uvd = UVData()
     uvd.read_uvh5(datafile)
     beamfile = DATA_PATH / "HERA_NF_dipole_power.beamfits"
-    uvb = hp.pspecbeam.PSpecBeamUV(str(beamfile), cosmo=None)
+    with ignore_known_hera_pspec_warnings():
+        uvb = hp.pspecbeam.PSpecBeamUV(str(beamfile), cosmo=None)
     jy_to_mk = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol="xx")
     # reshape to appropriately match a UVData.data_array object and multiply in!
     uvd.data_array *= jy_to_mk[None, :, None]
@@ -229,16 +260,17 @@ def test_exception_no_units():
         uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
     )
     # compute ps
-    uvp = ds.pspec(
-        baselines1,
-        baselines2,
-        dsets=(0, 1),
-        pols=[("xx", "xx")],
-        spw_ranges=(175, 195),
-        taper="bh",
-        store_cov=True,
-        verbose=False,
-    )
+    with ignore_known_hera_pspec_warnings():
+        uvp = ds.pspec(
+            baselines1,
+            baselines2,
+            dsets=(0, 1),
+            pols=[("xx", "xx")],
+            spw_ranges=(175, 195),
+            taper="bh",
+            store_cov=True,
+            verbose=False,
+        )
     with (
         pytest.raises(ValueError, match=r"Power Spectrum must be in"),
     ):
@@ -250,6 +282,7 @@ def test_exception_no_units():
         )
 
 
+@IGNORE_DELTASQ_CONVERSION
 def test_input_theory_kbins():
     uvp = prepare_uvp_object(spherical_avg=True)
     # test error if kperp_bins_theory is fed
